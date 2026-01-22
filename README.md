@@ -389,7 +389,7 @@ Depending on the AI provider and other integrations enabled in the repository, a
 npm install
 ```
 
-## 2) Configure Environment Variables
+### 2) Configure Environment Variables
 
 Create a `.env` file in the repository root:
 
@@ -399,7 +399,14 @@ NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secret"
 ```
 
-4) Run in Development Mode
+### 3) Prisma generate and migrate
+
+```bash
+npx prisma generate
+npx prisma migrate dev
+```
+
+### 4) Run in Development Mode
 
 Start the development server:
 
@@ -413,7 +420,7 @@ The application will be available at:
 http://localhost:3000
 ```
 
-5) Production Build
+### 5) Production Build
 
 Build and run the application in production mode:
 
@@ -422,176 +429,146 @@ npm run build
 npm start
 ```
 
-How the System Works (Flow Overview)
-Typical User Flow
+---
 
-User logs in.
+## How the System Works (Flow Overview)
 
-The system determines the active accountId from the session.
+### Typical User Flow
 
-The user manages:
+### 1. User logs in.
 
-Journals
+### 2. The system determines the active accountId from the session.
 
-Trades inside the active Journal
+### 3. The user manages:
 
-Strategies and Rules
+- Journals
 
-Tags
+- Trades inside the active Journal
 
-Spot Portfolio
+- Strategies and Rules
 
-The user can add chart trackers and view stored analyses.
+- Tags
 
-The user can run AI-based trade pre-analysis and store the results.
+- Spot Portfolio
 
-Core Principle
+### 4. The user can add chart trackers and view stored analyses.
 
-Most domain tables are scoped by account_id.
+### 5. The user can run AI-based trade pre-analysis and store the results.
+
+## Core Principle
+
+Most domain tables are scoped by `account_id`.
 
 This ensures clean data separation between users and accounts.
 
-Primary API Endpoints
-Journals
+### Primary API Endpoints
 
-GET /api/journals
+## Journals
 
-POST /api/journals
+- `GET /api/journals`
 
-DELETE /api/journals/:id
+- `POST /api/journals`
 
-POST /api/journal/active
+- `DELETE /api/journals/:id`
 
-Journal (Trades)
+- `POST /api/journal/active`
 
-GET /api/journal?start=<iso>&end=<iso>
+## Journal (Trades)
 
-POST /api/journal
+- `GET /api/journal?start=<iso>&end=<iso>`
 
-PUT /api/journal/:id
+- `POST /api/journal`
 
-DELETE /api/journal/:id
+- `PUT /api/journal/:id`
 
-Strategies
+- `DELETE /api/journal/:id`
 
-GET /api/strategies?start=<iso>&end=<iso>
+## Strategies
 
-GET /api/strategies
+- `GET /api/strategies?start=<iso>&end=<iso>`
 
-GET /api/strategies/:id
+- `GET /api/strategies`
 
-POST /api/strategies
+- `GET /api/strategies/:id`
 
-PUT /api/strategies/:id
+- `POST /api/strategies`
 
-DELETE /api/strategies/:id
+- `PUT /api/strategies/:id`
 
-Tags
+- `DELETE /api/strategies/:id`
 
-GET /api/tags
+## Tags
 
-POST /api/tags
+- `GET /api/tags`
 
-Portfolio
+- `POST /api/tags`
 
-GET /api/portfolio
+## Portfolio
 
-Trackers / Analyses
+- `GET /api/portfolio`
 
-GET /api/trackers
+## Trackers / Analyses
 
-POST /api/trackers
+- `GET /api/trackers`
 
-DELETE /api/trackers/:id
+- `POST /api/trackers`
 
-GET /api/chart-analyses?trackerId=<id>
+- `DELETE /api/trackers/:id`
 
-POST /api/cron/run-trackers
-(illustrative name; actual path depends on the repository structure)
+- `GET /api/chart-analyses?trackerId=<id>`
 
-Trade Analyzer (AI)
+- `POST /api/cron/run-trackers`
 
-POST /api/trade-analyzer
+## Trade Analyzer (AI)
 
-General Repository Notes
+- `POST /api/trade-analyzer`
 
-The project evolves iteratively; some files or modules may exist even if they are not currently used in the main execution flow.
+### General Repository Notes
 
-The codebase prioritizes incremental delivery while maintaining consistent, account-scoped data integrity.
+- The project evolves iteratively; some files or modules may exist even if they are not currently used in the main execution flow.
 
-Schema Quick Reference (Most Used Entities)
-user
+- The codebase prioritizes incremental delivery while maintaining consistent, account-scoped data integrity.
 
-id (int)
+### Schema Quick Reference (Most Used Entities)
 
-public_id (uuid)
+## user
 
-email
+- id (int), public_id (uuid), email, username, password_hash
 
-username
+- is_admin, avatar_url, display_name
 
-password_hash
+- relation: accounts
 
-is_admin
+## account
 
-avatar_url
+- id (uuid), user_id, type, name, created_at
 
-display_name
+- relation: journals, entries, strategies, tags, trackers, portfolio_trade, etc.
 
-Relation:
+## journal / journal_entry
 
-accounts
+- journal: per-account notebook
 
-account
+- journal_entry: trade with spot/futures details + timeframe + fees + notes + tags
 
-id (uuid)
+## strategy / rule / strategy_rule
 
-user_id
+- strategy: per account
 
-type
+- rule: global (unique title)
 
-name
+- strategy_rule: join table
 
-created_at
+## chart_tracker / chart_analysis / chart_subscription
 
-Relations:
+- trackers by symbol/timeframe
 
-journals
+- stored analyses
 
-journal entries
+- subscriptions connect trackers to accounts
 
-strategies
+## trade_pre_analysis / ai_usage
 
-tags
+- AI-generated trade pre-analysis
 
-trackers
-
-portfolio trades
-
-journal / journal_entry
-
-journal: per-account notebook
-
-journal_entry: trade record with spot/futures data, timeframe, fees, notes, and tags
-
-strategy / rule / strategy_rule
-
-strategy: per account
-
-rule: global rule catalog (unique title)
-
-strategy_rule: join table between strategies and rules
-
-chart_tracker / chart_analysis / chart_subscription
-
-Trackers defined by symbol and timeframe
-
-Stored analysis results
-
-Subscriptions connect trackers to accounts
-
-trade_pre_analysis / ai_usage
-
-AI-generated trade pre-analysis
-
-Usage logging for tokens, cost, and metadata
+- usage logging: tokens/cost/metadata

@@ -356,9 +356,6 @@ Goal:
   Example:
   ```env
   DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/trading_app"
----
-
-## Environment Variables
 
 ### Auth
 These variables are required for authentication and session handling via NextAuth.
@@ -368,8 +365,6 @@ These variables are required for authentication and session handling via NextAut
 
 - `NEXTAUTH_URL`  
   Base URL of the application (used by NextAuth for callbacks and redirects).
-
----
 
 ### Cron / Trackers
 These variables are used to protect and control scheduled tracker executions.
@@ -392,33 +387,40 @@ Depending on the AI provider and other integrations enabled in the repository, a
 ### 1) Install dependencies
 ```bash
 npm install
----
+```
 
 ## 2) Configure Environment Variables
 
 Create a `.env` file in the repository root:
 
-```env
+```bash
 DATABASE_URL="mysql://USER:PASSWORD@HOST:3306/trading_app"
 NEXTAUTH_URL="http://localhost:3000"
 NEXTAUTH_SECRET="your-secret"
+```
+
 4) Run in Development Mode
 
 Start the development server:
 
+```bash
 npm run dev
-
+```
 
 The application will be available at:
 
+```bash
 http://localhost:3000
+```
 
 5) Production Build
 
 Build and run the application in production mode:
 
+```bash
 npm run build
 npm start
+```
 
 How the System Works (Flow Overview)
 Typical User Flow

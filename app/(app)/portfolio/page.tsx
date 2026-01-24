@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import AddTransactionModal from "@/components/portfolio/AddTransactionModal";
-import PortfolioSummaryCards from "@/components/portfolio/PortfolioSummaryCards"; // você pode remover depois, se não quiser os 3 cards
 import AssetsTable, { AssetRow } from "@/components/portfolio/AssetsTable";
 import TransactionsTable, {
   TxRow,
@@ -38,55 +37,26 @@ type PortfolioApiRes = {
 };
 
 function BalanceCard({ summary: s }: { summary: Summary }) {
-  const profitUp = s.profit.total.usd >= 0;
+  const change24Up = s.portfolio24h.pct >= 0;
 
   return (
-    <Card className="rounded-[14px] shadow-[0_8px_20px_rgba(0,0,0,0.04)] h-[356px] flex flex-col">
-      <div className="flex items-center justify-between mb-3">
-        <div className="text-[15px] font-medium text-slate-400">
+    <Card className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] p-6">
+      <div className="flex items-center justify-between mb-4">
+        <div className="text-sm text-slate-500 font-medium">
           Current Balance
         </div>
+        <div className="text-sm text-slate-500 font-medium">24h</div>
       </div>
 
-      <div className="text-[36px] font-bold tracking-[-0.5px] mb-2">
-        {usd(s.currentBalanceUsd)}
-      </div>
+      <div className="text-4xl font-bold my-2">{usd(s.currentBalanceUsd)}</div>
 
-      <div className="text-[15px]">
-        <div className="flex items-center justify-between py-[14px] border-t border-slate-200">
-          <div className="text-slate-400 flex items-center gap-2">
-            Total Profit <span className="text-slate-300">ⓘ</span>
-          </div>
-          <div className="font-semibold flex items-center gap-2">
-            <span className="inline-flex items-center gap-1 px-[10px] py-[6px] rounded-full text-[13px] font-semibold bg-emerald-50 text-emerald-600">
-              {pct(s.profit.total.pct)}
-            </span>
-            <span className={profitUp ? "text-emerald-600" : "text-red-600"}>
-              {usd(s.profit.total.usd)}
-            </span>
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between py-[14px] border-t border-slate-200">
-          <div className="text-slate-400 flex items-center gap-2">
-            Realised Profit <span className="text-slate-300">ⓘ</span>
-          </div>
-          <div className="font-semibold">{usd(s.profit.realized.usd)}</div>
-        </div>
-
-        <div className="flex items-center justify-between py-[14px] border-t border-slate-200">
-          <div className="text-slate-400 flex items-center gap-2">
-            Unrealised Profit <span className="text-slate-300">ⓘ</span>
-          </div>
-          <div className="font-semibold text-emerald-600">
-            {usd(s.profit.unrealized.usd)}
-          </div>
-        </div>
-
-        <div className="flex items-center justify-between py-[14px] border-t border-slate-200 pb-6">
-          <div className="text-slate-400">Total Invested</div>
-          <div className="font-semibold">{usd(s.totalInvestedUsd)}</div>
-        </div>
+      <div className="flex gap-3 text-sm text-slate-500">
+        <span className={change24Up ? "text-emerald-600" : "text-red-600"}>
+          {pct(s.portfolio24h.pct)}
+        </span>
+        <span className={change24Up ? "text-emerald-600" : "text-red-600"}>
+          {usd(s.portfolio24h.usd)}
+        </span>
       </div>
     </Card>
   );
@@ -117,24 +87,34 @@ export default function PortfolioPage() {
     void load();
   }, []);
 
-  const hasAssets = (data?.assets?.length ?? 0) > 0
+  const hasAssets = (data?.assets?.length ?? 0) > 0;
 
-  const allocationAssets: AllocationAssetRow[] = (data?.assets ?? []).map((a) => ({
-    symbol: a.symbol,
-    name: a.name ?? null,
-    holdingsValueUsd: a.holdingsValueUsd,
-    totalInvestedUsd: a.totalInvestedUsd,
-  }))
+  const allocationAssets: AllocationAssetRow[] = (data?.assets ?? []).map(
+    (a) => ({
+      symbol: a.symbol,
+      name: a.name ?? null,
+      holdingsValueUsd: a.holdingsValueUsd,
+    }),
+  );
 
   return (
-    <div className="grid gap-6">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-8">
         <div className="flex items-center gap-3">
-      
+          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-cyan-300 to-blue-500 text-white font-bold flex items-center justify-center">
+            M
+          </div>
+          <div className="text-xl font-bold">Main Portfolio</div>
         </div>
 
-        <div className="flex gap-3">
-          <button className="px-4 py-2 rounded-xl bg-blue-600 text-white" onClick={() => setModalOpen(true)}>
+        <div className="flex items-center gap-4">
+          <button className="text-slate-500 font-medium hover:text-slate-700">
+            Manage
+          </button>
+          <button
+            className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700"
+            onClick={() => setModalOpen(true)}
+          >
             + Add Asset
           </button>
         </div>
@@ -147,28 +127,53 @@ export default function PortfolioPage() {
       ) : !data ? (
         <Card className="p-6">No data.</Card>
       ) : !hasAssets ? (
-        <Card className="p-10">
-          <div className="max-w-xl">
-            <div className="text-xl font-semibold">Your Portfolio is Empty</div>
-            <div className="text-sm text-gray-600 mt-2">
-              Add a new asset with the button below or use search to start
-              tracking your portfolio.
-            </div>
+        <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-8">
+          <div className="flex flex-col gap-6 lg:order-1 order-2">
+            <BalanceCard summary={data.summary} />
 
-            <button
-              className="mt-6 inline-flex items-center rounded-xl bg-blue-600 px-4 py-2 text-sm font-medium text-white"
-              onClick={() => setModalOpen(true)}
-            >
-              + Add Asset
-            </button>
+            <div className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] h-[420px] border-2 border-dashed border-slate-200 bg-white/35 p-6 flex flex-col gap-3">
+              <div className="font-bold text-slate-500">Top Performers</div>
+              <div className="flex-1 flex items-center justify-center text-center text-sm text-slate-500 px-6">
+                No assets yet. Top performers will appear here once you add
+                assets.
+              </div>
+            </div>
           </div>
-        </Card>
+
+          <div className="lg:order-2 order-1 flex items-center justify-center">
+            <Card className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] w-full min-h-[620px] flex items-center justify-center text-center">
+              <div className="max-w-[420px] px-6">
+                <div className="mx-auto mb-6 flex h-20 w-20 items-center justify-center rounded-full bg-[#f2eaff] text-[#5801cc] text-4xl font-bold">
+                  💧
+                </div>
+
+                <div className="text-[22px] font-bold mb-2">
+                  Your Portfolio is Empty
+                </div>
+
+                <div className="text-slate-500 leading-relaxed mb-6">
+                  Add a new asset with the button below or use search to start
+                  tracking your portfolio.
+                </div>
+
+                <button
+                  className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700 mt-2"
+                  onClick={() => setModalOpen(true)}
+                >
+                  + Add Asset
+                </button>
+              </div>
+            </Card>
+          </div>
+        </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
           <BalanceCard summary={data.summary} />
           <HoldingsAllocationCard assets={allocationAssets} />
+
           <TopPerformersCard topPerformer={data.summary.topPerformer} />
           <AssetsTable assets={data.assets} />
+
           <div className="hidden lg:block" />
           <TransactionsTable rows={data.transactions} />
         </div>
@@ -183,7 +188,7 @@ export default function PortfolioPage() {
         }}
       />
 
-      <footer className="text-xs text-gray-500 py-6 flex items-center gap-6">
+      <footer className="text-xs text-gray-500 py-6 flex items-center gap-6 mt-8">
         <span>© 2025 Stakk AI. All rights reserved.</span>
       </footer>
     </div>

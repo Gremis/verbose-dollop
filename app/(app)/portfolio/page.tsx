@@ -1,14 +1,10 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import AddTransactionModal from "@/components/portfolio/AddTransactionModal";
 import AssetsTable, { AssetRow } from "@/components/portfolio/AssetsTable";
-import TransactionsTable, {
-  TxRow,
-} from "@/components/portfolio/TransactionsTable";
-import HoldingsAllocationCard, {
-  AllocationAssetRow,
-} from "@/components/portfolio/HoldingsAllocationCard";
+import TransactionsTable, { TxRow } from "@/components/portfolio/TransactionsTable";
+import HoldingsAllocationCard, { AllocationAssetRow } from "@/components/portfolio/HoldingsAllocationCard";
 import TopPerformersCard from "@/components/portfolio/TopPerformersCard";
 import Card from "@/components/ui/Card";
 import { usd, pct } from "@/components/portfolio/format";
@@ -36,15 +32,13 @@ type PortfolioApiRes = {
   transactions: TxRow[];
 };
 
-function BalanceCard({ summary: s }: { summary: Summary }) {
+function BalanceCardEmpty({ summary: s }: { summary: Summary }) {
   const change24Up = s.portfolio24h.pct >= 0;
 
   return (
     <Card className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] p-6">
       <div className="flex items-center justify-between mb-4">
-        <div className="text-sm text-slate-500 font-medium">
-          Current Balance
-        </div>
+        <div className="text-sm text-slate-500 font-medium">Current Balance</div>
         <div className="text-sm text-slate-500 font-medium">24h</div>
       </div>
 
@@ -57,6 +51,57 @@ function BalanceCard({ summary: s }: { summary: Summary }) {
         <span className={change24Up ? "text-emerald-600" : "text-red-600"}>
           {usd(s.portfolio24h.usd)}
         </span>
+      </div>
+    </Card>
+  );
+}
+
+function BalanceCardFilled({ summary: s }: { summary: Summary }) {
+  const profitUp = s.profit.total.usd >= 0;
+
+  return (
+    <Card className="rounded-[14px] shadow-[0_8px_20px_rgba(0,0,0,0.04)] h-[356px] flex flex-col p-6">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-[15px] font-medium text-slate-400">Current Balance</div>
+      </div>
+
+      <div className="text-[36px] font-bold tracking-[-0.5px] mb-2">
+        {usd(s.currentBalanceUsd)}
+      </div>
+
+      <div className="text-[15px]">
+        <div className="flex items-center justify-between py-[14px] border-t border-slate-200">
+          <div className="text-slate-400 flex items-center gap-2">
+            Total Profit <span className="text-slate-300">ⓘ</span>
+          </div>
+          <div className="font-semibold flex items-center gap-2">
+            <span className="inline-flex items-center gap-1 px-[10px] py-[6px] rounded-full text-[13px] font-semibold bg-emerald-50 text-emerald-600">
+              {pct(s.profit.total.pct)}
+            </span>
+            <span className={profitUp ? "text-emerald-600" : "text-red-600"}>
+              {usd(s.profit.total.usd)}
+            </span>
+          </div>
+        </div>
+
+        <div className="flex items-center justify-between py-[14px] border-t border-slate-200">
+          <div className="text-slate-400 flex items-center gap-2">
+            Realised Profit <span className="text-slate-300">ⓘ</span>
+          </div>
+          <div className="font-semibold">{usd(s.profit.realized.usd)}</div>
+        </div>
+
+        <div className="flex items-center justify-between py-[14px] border-t border-slate-200">
+          <div className="text-slate-400 flex items-center gap-2">
+            Unrealised Profit <span className="text-slate-300">ⓘ</span>
+          </div>
+          <div className="font-semibold text-emerald-600">{usd(s.profit.unrealized.usd)}</div>
+        </div>
+
+        <div className="flex items-center justify-between py-[14px] border-t border-slate-200 pb-6">
+          <div className="text-slate-400">Total Invested</div>
+          <div className="font-semibold">{usd(s.totalInvestedUsd)}</div>
+        </div>
       </div>
     </Card>
   );
@@ -89,28 +134,21 @@ export default function PortfolioPage() {
 
   const hasAssets = (data?.assets?.length ?? 0) > 0;
 
-  const allocationAssets: AllocationAssetRow[] = (data?.assets ?? []).map(
-    (a) => ({
+  const allocationAssets: AllocationAssetRow[] = useMemo(() => {
+    return (data?.assets ?? []).map((a) => ({
       symbol: a.symbol,
       name: a.name ?? null,
       holdingsValueUsd: a.holdingsValueUsd,
-    }),
-  );
+      totalInvestedUsd: a.totalInvestedUsd,
+    }));
+  }, [data?.assets]);
 
   return (
     <div className="p-8">
       <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-gradient-to-br from-cyan-300 to-blue-500 text-white font-bold flex items-center justify-center">
-            M
-          </div>
-          <div className="text-xl font-bold">Main Portfolio</div>
-        </div>
+        <div className="flex items-center gap-3">{/* left header content */}</div>
 
         <div className="flex items-center gap-4">
-          <button className="text-slate-500 font-medium hover:text-slate-700">
-            Manage
-          </button>
           <button
             className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700"
             onClick={() => setModalOpen(true)}
@@ -129,13 +167,12 @@ export default function PortfolioPage() {
       ) : !hasAssets ? (
         <div className="grid grid-cols-1 lg:grid-cols-[360px_1fr] gap-8">
           <div className="flex flex-col gap-6 lg:order-1 order-2">
-            <BalanceCard summary={data.summary} />
+            <BalanceCardEmpty summary={data.summary} />
 
             <div className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] h-[420px] border-2 border-dashed border-slate-200 bg-white/35 p-6 flex flex-col gap-3">
               <div className="font-bold text-slate-500">Top Performers</div>
               <div className="flex-1 flex items-center justify-center text-center text-sm text-slate-500 px-6">
-                No assets yet. Top performers will appear here once you add
-                assets.
+                No assets yet. Top performers will appear here once you add assets.
               </div>
             </div>
           </div>
@@ -147,13 +184,10 @@ export default function PortfolioPage() {
                   💧
                 </div>
 
-                <div className="text-[22px] font-bold mb-2">
-                  Your Portfolio is Empty
-                </div>
+                <div className="text-[22px] font-bold mb-2">Your Portfolio is Empty</div>
 
                 <div className="text-slate-500 leading-relaxed mb-6">
-                  Add a new asset with the button below or use search to start
-                  tracking your portfolio.
+                  Add a new asset with the button below or use search to start tracking your portfolio.
                 </div>
 
                 <button
@@ -168,12 +202,10 @@ export default function PortfolioPage() {
         </div>
       ) : (
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          <BalanceCard summary={data.summary} />
+          <BalanceCardFilled summary={data.summary} />
           <HoldingsAllocationCard assets={allocationAssets} />
-
           <TopPerformersCard topPerformer={data.summary.topPerformer} />
           <AssetsTable assets={data.assets} />
-
           <div className="hidden lg:block" />
           <TransactionsTable rows={data.transactions} />
         </div>

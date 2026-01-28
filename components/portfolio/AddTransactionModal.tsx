@@ -208,6 +208,47 @@ export default function AddTransactionModal(props: {
   const canSave =
     !!selected && priceUsd > 0 && (!!amountRaw || !!totalRaw) && !busy;
 
+  const canDelete =
+    mode === "edit" && step !== "pick" && !!props.initialTx?.id && !busy;
+
+  async function handleDelete() {
+    if (!props.initialTx?.id) return;
+
+    const ok = confirm(
+      "Delete this transaction? This action cannot be undone.",
+    );
+    if (!ok) return;
+
+    try {
+      setBusy(true);
+
+      const res = await fetch(
+        `/api/portfolio/transaction/${props.initialTx.id}`,
+        { method: "DELETE" },
+      );
+
+      if (!res.ok) {
+        const j = (await res.json().catch(() => null)) as {
+          error?: unknown;
+        } | null;
+        const msg =
+          typeof j?.error === "string"
+            ? j.error
+            : "Failed to delete transaction";
+        throw new Error(msg);
+      }
+
+      await props.onDone();
+
+      props.onClose();
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed";
+      alert(msg);
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <Modal
       open={props.open}
@@ -224,104 +265,123 @@ export default function AddTransactionModal(props: {
             : `Add Asset • ${selected?.symbol ?? ""}`
       }
       footer={
-        <div className="flex items-center justify-end gap-3">
-          <button
-            className="rounded-xl bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-            onClick={() => {
-              props.onClose();
-            }}
-            disabled={busy}
-          >
-            Cancel
-          </button>
-
-          {step === "pick" ? null : (
+        <div className="flex items-center justify-between gap-3">
+          {/* LEFT: Delete */}
+          {canDelete ? (
             <button
-              className="rounded-xl bg-gray-900 text-white px-4 py-2 text-sm disabled:opacity-50"
-              disabled={!canSave}
-              onClick={async () => {
-                if (!selected) return;
-                try {
-                  setBusy(true);
-                  const amount = numFromRaw(amountRaw);
-                  const total = numFromRaw(totalRaw);
-
-                  const payload: {
-                    asset: { id: string; symbol: string; name: string };
-                    side: "buy" | "sell";
-                    priceMode: "market" | "custom";
-                    priceUsd?: number;
-                    qty?: number;
-                    totalUsd?: number;
-                    feeUsd: number;
-                    executedAt: string;
-                  } = {
-                    asset: {
-                      id: selected.id,
-                      symbol: selected.symbol,
-                      name: selected.name,
-                    },
-                    side,
-                    priceMode,
-                    priceUsd: priceMode === "custom" ? priceUsd : undefined,
-                    qty:
-                      lastEdited.current === "total"
-                        ? undefined
-                        : amount || undefined,
-                    totalUsd:
-                      lastEdited.current === "amount"
-                        ? undefined
-                        : total || undefined,
-                    feeUsd: 0,
-                    executedAt: new Date().toISOString(),
-                  };
-
-                  const url =
-                    mode === "edit" && props.initialTx?.id
-                      ? `/api/portfolio/transaction/${props.initialTx.id}`
-                      : "/api/portfolio/add-transaction";
-
-                  const method = mode === "edit" ? "PUT" : "POST";
-
-                  const res = await fetch(url, {
-                    method,
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(
-                      mode === "edit"
-                        ? {
-                            side,
-                            qty: amount,
-                            priceUsd: priceUsd,
-                            feeUsd: 0,
-                            executedAt: props.initialTx?.executedAt,
-                          }
-                        : payload,
-                    ),
-                  });
-                  if (!res.ok) {
-                    const j = (await res.json().catch(() => null)) as {
-                      error?: unknown;
-                    } | null;
-                    const msg =
-                      typeof j?.error === "string"
-                        ? j.error
-                        : "Failed to save changes";
-
-                    throw new Error(msg);
-                  }
-
-                  await props.onDone();
-                } catch (e) {
-                  const msg = e instanceof Error ? e.message : "Failed";
-                  alert(msg);
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              className="rounded-xl bg-red-500 text-white px-4 py-2 text-sm hover:bg-red-600 disabled:opacity-50"
+              onClick={handleDelete}
+              disabled={!canDelete}
+              type="button"
             >
-              {mode === "edit" ? "Save changes" : "Save"}
+              Delete
             </button>
+          ) : (
+            <div />
           )}
+
+          {/* RIGHT: Cancel + Save */}
+          <div className="flex items-center justify-end gap-3">
+            <button
+              className="rounded-xl bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
+              onClick={() => {
+                props.onClose();
+              }}
+              disabled={busy}
+              type="button"
+            >
+              Cancel
+            </button>
+
+            {step === "pick" ? null : (
+              <button
+                className="rounded-xl bg-gray-900 text-white px-4 py-2 text-sm disabled:opacity-50"
+                disabled={!canSave}
+                onClick={async () => {
+                  if (!selected) return;
+                  try {
+                    setBusy(true);
+                    const amount = numFromRaw(amountRaw);
+                    const total = numFromRaw(totalRaw);
+
+                    const payload: {
+                      asset: { id: string; symbol: string; name: string };
+                      side: "buy" | "sell";
+                      priceMode: "market" | "custom";
+                      priceUsd?: number;
+                      qty?: number;
+                      totalUsd?: number;
+                      feeUsd: number;
+                      executedAt: string;
+                    } = {
+                      asset: {
+                        id: selected.id,
+                        symbol: selected.symbol,
+                        name: selected.name,
+                      },
+                      side,
+                      priceMode,
+                      priceUsd: priceMode === "custom" ? priceUsd : undefined,
+                      qty:
+                        lastEdited.current === "total"
+                          ? undefined
+                          : amount || undefined,
+                      totalUsd:
+                        lastEdited.current === "amount"
+                          ? undefined
+                          : total || undefined,
+                      feeUsd: 0,
+                      executedAt: new Date().toISOString(),
+                    };
+
+                    const url =
+                      mode === "edit" && props.initialTx?.id
+                        ? `/api/portfolio/transaction/${props.initialTx.id}`
+                        : "/api/portfolio/add-transaction";
+
+                    const method = mode === "edit" ? "PUT" : "POST";
+
+                    const res = await fetch(url, {
+                      method,
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify(
+                        mode === "edit"
+                          ? {
+                              side,
+                              qty: amount,
+                              priceUsd: priceUsd,
+                              feeUsd: 0,
+                              executedAt: props.initialTx?.executedAt,
+                            }
+                          : payload,
+                      ),
+                    });
+                    if (!res.ok) {
+                      const j = (await res.json().catch(() => null)) as {
+                        error?: unknown;
+                      } | null;
+                      const msg =
+                        typeof j?.error === "string"
+                          ? j.error
+                          : "Failed to save changes";
+
+                      throw new Error(msg);
+                    }
+
+                    await props.onDone();
+                  } catch (e) {
+                    const msg = e instanceof Error ? e.message : "Failed";
+                    alert(msg);
+                  } finally {
+                    setBusy(false);
+                  }
+                }}
+                type="button"
+              >
+                {mode === "edit" ? "Save changes" : "Save"}
+              </button>
+            )}
+          </div>
         </div>
       }
     >
@@ -358,6 +418,7 @@ export default function AddTransactionModal(props: {
                       lastEdited.current = null;
                       await loadMarketPrice(a.id);
                     }}
+                    type="button"
                   >
                     <div className="flex items-center justify-between gap-3">
                       <div className="grid">
@@ -395,6 +456,7 @@ export default function AddTransactionModal(props: {
                       lastEdited.current = null;
                       await loadMarketPrice(a.id);
                     }}
+                    type="button"
                   >
                     <div className="grid">
                       <span className="font-semibold">{a.symbol}</span>
@@ -417,6 +479,7 @@ export default function AddTransactionModal(props: {
                   : "bg-white border-gray-200",
               )}
               onClick={() => setSide("buy")}
+              type="button"
             >
               Buy
             </button>
@@ -428,6 +491,7 @@ export default function AddTransactionModal(props: {
                   : "bg-white border-gray-200",
               )}
               onClick={() => setSide("sell")}
+              type="button"
             >
               Sell
             </button>

@@ -38,7 +38,6 @@ export async function PUT(
       ...(trade_datetime ? { trade_datetime } : {}),
     };
 
-    // fee depende del lado
     if (input.side === "buy") data.buy_fee = input.feeUsd ?? 0;
     if (input.side === "sell") data.sell_fee = input.feeUsd ?? 0;
 
@@ -46,7 +45,7 @@ export async function PUT(
       where: {
         id: tradeId,
         account_id: session.accountId,
-        spot_trade: { some: {} }, // asegura que sea spot
+        spot_trade: { some: {} },
         asset_name: { not: "CASH" },
         side: { in: ["buy", "sell"] },
       },
@@ -66,6 +65,42 @@ export async function PUT(
       return NextResponse.json({ error: err.flatten() }, { status: 400 });
     }
     console.error("[PUT /api/portfolio/transaction/:id] error:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
+  }
+}
+
+export async function DELETE(
+  _req: Request,
+  ctx: { params: Promise<{ id: string }> },
+) {
+  try {
+    const session = await getServerSession(authOptions);
+    if (!session?.accountId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const { id: tradeId } = await ctx.params;
+
+    const result = await prisma.journal_entry.deleteMany({
+      where: {
+        id: tradeId,
+        account_id: session.accountId,
+        spot_trade: { some: {} },
+        asset_name: { not: "CASH" },
+        side: { in: ["buy", "sell"] },
+      },
+    });
+
+    if (result.count === 0) {
+      return NextResponse.json(
+        { error: "Transaction not found" },
+        { status: 404 },
+      );
+    }
+
+    return NextResponse.json({ ok: true });
+  } catch (err) {
+    console.error("[DELETE /api/portfolio/transaction/:id] error:", err);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

@@ -30,7 +30,6 @@ function usd4(n: number) {
 }
 
 function pct2Always(v: number | null, fallback = 0) {
-  // Always show a percentage (fix for ADA/SOL missing %)
   const n = v == null ? fallback : v;
   const safe = Number.isFinite(n) ? n : fallback;
   const sign = safe > 0 ? "" : safe < 0 ? "" : "";

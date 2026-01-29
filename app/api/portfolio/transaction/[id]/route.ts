@@ -14,22 +14,17 @@ const Body = z.object({
   executedAt: z.string().datetime().optional(),
 });
 
-export async function PUT(
-  req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export async function PUT(req: Request, ctx: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.accountId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: tradeId } = await ctx.params;
+    const tradeId = ctx.params.id;
     const input = Body.parse(await req.json());
 
-    const trade_datetime = input.executedAt
-      ? new Date(input.executedAt)
-      : undefined;
+    const trade_datetime = input.executedAt ? new Date(input.executedAt) : undefined;
 
     const data: Record<string, unknown> = {
       side: input.side,
@@ -53,10 +48,7 @@ export async function PUT(
     });
 
     if (result.count === 0) {
-      return NextResponse.json(
-        { error: "Transaction not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });
@@ -69,17 +61,14 @@ export async function PUT(
   }
 }
 
-export async function DELETE(
-  _req: Request,
-  ctx: { params: Promise<{ id: string }> },
-) {
+export async function DELETE(req: Request, ctx: { params: { id: string } }) {
   try {
     const session = await getServerSession(authOptions);
     if (!session?.accountId) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    const { id: tradeId } = await ctx.params;
+    const tradeId = ctx.params.id;
 
     const result = await prisma.journal_entry.deleteMany({
       where: {
@@ -92,10 +81,7 @@ export async function DELETE(
     });
 
     if (result.count === 0) {
-      return NextResponse.json(
-        { error: "Transaction not found" },
-        { status: 404 },
-      );
+      return NextResponse.json({ error: "Transaction not found" }, { status: 404 });
     }
 
     return NextResponse.json({ ok: true });

@@ -35,6 +35,10 @@ export default function DashboardShell({ children }: Props) {
   const [courseOpen, setCourseOpen] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
+  // Estados para controlar a sidebar
+  const [sidebarExpanded, setSidebarExpanded] = useState(false);
+  const [sidebarHovered, setSidebarHovered] = useState(false);
+
   const pathname = usePathname();
 
   const openComingSoon = (e?: React.MouseEvent) => {
@@ -54,6 +58,9 @@ export default function DashboardShell({ children }: Props) {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
+  // Determina se a sidebar deve mostrar texto
+  const showSidebarText = sidebarExpanded || sidebarHovered;
+
   return (
     <div className="min-h-dvh bg-gray-50">
       <div
@@ -62,6 +69,31 @@ export default function DashboardShell({ children }: Props) {
       >
         <div className="mx-auto max-w-7xl flex items-center justify-between px-6 py-4">
           <div className="flex items-center gap-6 relative">
+            {/* Botão hamburguer para desktop - controla a sidebar */}
+            <button
+              onClick={() => setSidebarExpanded(!sidebarExpanded)}
+              className="hidden md:flex items-center justify-center h-10 w-10 rounded-lg hover:bg-white/20 transition-colors cursor-pointer"
+              title={sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+              aria-label={
+                sidebarExpanded ? "Collapse sidebar" : "Expand sidebar"
+              }
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 20 20"
+                fill="none"
+                className="text-gray-700"
+              >
+                <path
+                  d="M3 5h14M3 10h14M3 15h14"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                />
+              </svg>
+            </button>
+
             <Link
               href="/"
               className="inline-flex items-center"
@@ -92,14 +124,14 @@ export default function DashboardShell({ children }: Props) {
               </span>
             </Link>
 
-          <nav className="hidden xl:flex items-center gap-6 opacity-90">
-            <Link href="/dashboard">Home</Link>
-            <Link href="/journal">Trading Journal</Link>
-            <Link href="/strategies">Strategy Creator</Link>
-            <Link href="/exit-strategy">Exit Strategy</Link>
-            <Link href="/trade-analyzer">Trade Analyzer</Link>
-            {isAdmin && <Link href="/admin">Admin</Link>}
-          </nav>
+            <nav className="hidden xl:flex items-center gap-6 opacity-90">
+              <Link href="/dashboard">Home</Link>
+              <Link href="/journal">Trading Journal</Link>
+              <Link href="/strategies">Strategy Creator</Link>
+              <Link href="/exit-strategy">Exit Strategy</Link>
+              <Link href="/trade-analyzer">Trade Analyzer</Link>
+              {isAdmin && <Link href="/admin">Admin</Link>}
+            </nav>
 
             <button
               className="inline-flex flex-col items-center justify-center rounded-full bg-white/15 p-2 hover:bg-white/20 xl:hidden cursor-pointer"
@@ -241,54 +273,114 @@ export default function DashboardShell({ children }: Props) {
         </div>
       </div>
 
-      <div className="mx-auto w-full max-w-7xl md:max-w-none grid grid-cols-1 md:grid-cols-[260px_minmax(0,1fr)] gap-6 px-4 md:px-6 py-6">
-        <aside className="hidden md:block">
-          <div className="sticky top-6">
-            <div className="rounded-2xl bg-primary text-white p-6">
-              <div className="h-16 w-16 rounded-full bg-white/20 grid place-items-center text-xl mb-3 overflow-hidden relative">
-                {data?.user?.image ? (
-                  <Image
-                    src={data.user.image}
-                    alt="avatar"
-                    fill
-                    className="object-cover"
-                    sizes="64px"
-                  />
-                ) : (
-                  avatarText
-                )}
+      <div className="mx-auto w-full max-w-7xl md:max-w-none px-4 md:px-6 py-6 relative">
+        <aside
+          className="hidden md:block fixed left-0 top-[88px] bottom-0 z-40 transition-all duration-300 ease-in-out bg-gray-50"
+          onMouseEnter={() => setSidebarHovered(true)}
+          onMouseLeave={() => setSidebarHovered(false)}
+          style={{
+            width: showSidebarText ? "260px" : "80px",
+          }}
+        >
+          <div className="h-full overflow-y-auto px-4 py-6">
+            {/* Card do usuário */}
+            <div className="rounded-2xl bg-primary text-white p-6 overflow-hidden relative">
+              <div className="flex items-center gap-3">
+                <div className="h-16 w-16 rounded-full bg-white/20 grid place-items-center text-xl flex-shrink-0 overflow-hidden relative">
+                  {data?.user?.image ? (
+                    <Image
+                      src={data.user.image}
+                      alt="avatar"
+                      fill
+                      className="object-cover"
+                      sizes="64px"
+                    />
+                  ) : (
+                    avatarText
+                  )}
+                </div>
+
+                <div
+                  className="overflow-hidden transition-all duration-300"
+                  style={{
+                    maxWidth: showSidebarText ? "200px" : "0",
+                    opacity: showSidebarText ? 1 : 0,
+                    maxHeight: showSidebarText ? "100px" : "0",
+                  }}
+                >
+                  <div className="font-semibold whitespace-nowrap">
+                    {displayName}
+                  </div>
+                  <span className="inline-block mt-2 text-xs bg-white/15 rounded-full px-2 py-1 whitespace-nowrap">
+                    Free Tier
+                  </span>
+                </div>
               </div>
-              <div className="font-semibold">{displayName}</div>
-              <span className="inline-block mt-3 text-xs bg-white/15 rounded-full px-2 py-1">
-                Free Tier
-              </span>
             </div>
 
+            {/* Menu de navegação */}
             <ul className="mt-6 grid gap-2">
-              <NavItem href="/dashboard" label="Home" icon="🏠" />
-              <NavItem href="/portfolio" label="Portfolio Manager" icon="💼" />
-              {/* {isAdmin && (
-                <NavItem
-                  href="/chart-tracker"
-                  label="Chart Tracker"
-                  icon="⚙️"
-                />
-              )} */}
-              <NavItem href="/journal" label="Trading Journal" icon="🗒️" />
-              <NavItem href="/strategies" label="Strategy Creator" icon="🧭" />
-                <NavItem href="/exit-strategy" label="Exit Strategy" icon="🚪" />
+              <NavItem
+                href="/dashboard"
+                label="Home"
+                icon="🏠"
+                showText={showSidebarText}
+              />
+              <NavItem
+                href="/portfolio"
+                label="Portfolio Manager"
+                icon="💼"
+                showText={showSidebarText}
+              />
+              <NavItem
+                href="/journal"
+                label="Trading Journal"
+                icon="🗒️"
+                showText={showSidebarText}
+              />
+              <NavItem
+                href="/strategies"
+                label="Strategy Creator"
+                icon="🧭"
+                showText={showSidebarText}
+              />
+              <NavItem
+                href="/exit-strategy"
+                label="Exit Strategy"
+                icon="🚪"
+                showText={showSidebarText}
+              />
               <NavItem
                 href="/trade-analyzer"
                 label="Trade Analyzer"
                 icon="📈"
+                showText={showSidebarText}
               />
-              {isAdmin && <NavItem href="/admin" label="Admin" icon="🛡️" />}
-              <NavItem href="/add-coin" label="Coin Tracker" icon="🔍" />
+              {isAdmin && (
+                <NavItem
+                  href="/admin"
+                  label="Admin"
+                  icon="🛡️"
+                  showText={showSidebarText}
+                />
+              )}
+              <NavItem
+                href="/add-coin"
+                label="Coin Tracker"
+                icon="🔍"
+                showText={showSidebarText}
+              />
             </ul>
           </div>
         </aside>
 
-        <main className="min-w-0">{children}</main>
+        <main
+          className={`min-w-0 transition-all duration-300 ease-in-out ${
+            showSidebarText ? "md:ml-[260px]" : "md:ml-[80px]"
+          }`}
+        >
+          {children}
+        </main>
       </div>
 
       {courseOpen && (
@@ -352,19 +444,30 @@ function NavItem({
   href,
   label,
   icon,
+  showText = true,
 }: {
   href: string;
   label: string;
   icon: string;
+  showText?: boolean;
 }) {
   return (
     <li>
       <Link
-        className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-gray-100"
+        className="flex items-center gap-3 rounded-xl px-3 py-2 hover:bg-gray-100 transition-colors"
         href={href}
+        title={!showText ? label : undefined}
       >
-        <span className="w-6 text-center">{icon}</span>
-        <span>{label}</span>
+        <span className="w-6 text-center flex-shrink-0 text-lg">{icon}</span>
+        <span
+          className="whitespace-nowrap overflow-hidden transition-all duration-300"
+          style={{
+            width: showText ? "auto" : "0",
+            opacity: showText ? 1 : 0,
+          }}
+        >
+          {label}
+        </span>
       </Link>
     </li>
   );

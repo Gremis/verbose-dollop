@@ -3,6 +3,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { cgPriceUsdByIdSafe } from "@/lib/markets/coingecko";
+import { calculateKeyLevels } from "@/lib/markets/pivotPoints";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,9 @@ type DbRow = {
 
 export async function GET(
   request: Request,
-  { params }: { params: { symbol: string } },
+  { params }: { params: Promise<{ symbol: string }> },
 ) {
+  let symbol = "[unknown]"; // Declara fora do try
   try {
     const session = await getServerSession(authOptions);
     if (!session?.accountId) {
@@ -28,7 +30,8 @@ export async function GET(
     }
 
     const accountId = session.accountId;
-    const symbol = params.symbol.toUpperCase();
+    const { symbol: symbolParam } = await params;
+    symbol = symbolParam.toUpperCase(); // Atribui aqui
 
     // Buscar metadata do asset
     const assetMeta = await prisma.verified_asset.findUnique({
@@ -164,19 +167,11 @@ export async function GET(
 
     const avgBuyPrice = qtyHeld > 0 ? costBasisUsd / qtyHeld : 0;
 
-    // Mock Key Levels por enquanto
-    const mockKeyLevels = {
-      supports: [
-        { price: currentPrice * 0.96, distance: "4.0%", timeframe: "Daily" },
-        { price: currentPrice * 0.93, distance: "7.0%", timeframe: "Weekly" },
-        { price: currentPrice * 0.9, distance: "10.0%", timeframe: "HTF" },
-      ],
-      resistances: [
-        { price: currentPrice * 1.04, distance: "4.0%", timeframe: "Daily" },
-        { price: currentPrice * 1.07, distance: "7.0%", timeframe: "Weekly" },
-        { price: currentPrice * 1.1, distance: "10.0%", timeframe: "HTF" },
-      ],
-    };
+    // Calcular Key Levels reais
+    const keyLevels = await calculateKeyLevels(
+      assetMeta.coingecko_id,
+      currentPrice,
+    );
 
     return NextResponse.json({
       symbol,
@@ -204,12 +199,12 @@ export async function GET(
         totalInvested: totalInvestedUsd,
       },
 
-      keyLevels: mockKeyLevels,
+      keyLevels: keyLevels,
 
       transactions: transactions.reverse(), // Mais recentes primeiro
     });
   } catch (e) {
-    console.error(`[GET /api/portfolio/${params.symbol}] error:`, e);
+    console.error(`[GET /api/portfolio/${symbol}] error:`, e);
     return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

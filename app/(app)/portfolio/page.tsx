@@ -225,20 +225,7 @@ export default function PortfolioPage() {
   // View normal (lista de assets)
   return (
     <div className="p-8">
-      <div className="flex items-center justify-between mb-8">
-        <div className="flex items-center gap-3">
-          {/* left header content */}
-        </div>
-
-        <div className="flex items-center gap-4">
-          <button
-            className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700"
-            onClick={() => setModalOpen(true)}
-          >
-            + Add Asset
-          </button>
-        </div>
-      </div>
+      {/* Removido o header com botão Add Asset do topo */}
 
       {loading ? (
         <Card className="p-6">Loading…</Card>
@@ -287,15 +274,22 @@ export default function PortfolioPage() {
           </div>
         </div>
       ) : (
+        // Layout corrigido: coluna esquerda com cards empilhados + coluna direita com tabela
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          <BalanceCardFilled summary={data.summary} />
+          {/* Coluna esquerda - Cards empilhados na ordem correta */}
+          <div className="flex flex-col gap-6">
+            {/* 1º - Holdings Allocation (primeiro card conforme solicitado) */}
+            <HoldingsAllocationCard assets={allocationAssets} />
 
-          {/* NOVO: Holdings Allocation só aparece quando NÃO há asset selecionado */}
-          <HoldingsAllocationCard assets={allocationAssets} />
+            {/* 2º - Balance Card */}
+            <BalanceCardFilled summary={data.summary} />
 
-          <TopPerformersCard assets={data.assets} />
+            {/* 3º - Top Performers */}
+            <TopPerformersCard assets={data.assets} />
+          </div>
 
-          <div className="lg:col-start-2 lg:row-start-1 lg:row-span-3">
+          {/* Coluna direita - Your Assets / Transactions com botão Add Asset DENTRO */}
+          <div className="lg:row-span-3">
             <Card className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] p-0 overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
                 <div className="flex items-center gap-2">
@@ -323,6 +317,14 @@ export default function PortfolioPage() {
                     Transactions
                   </button>
                 </div>
+
+                {/* Botão Add Asset movido para DENTRO do card */}
+                <button
+                  className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700"
+                  onClick={() => setModalOpen(true)}
+                >
+                  + Add Asset
+                </button>
               </div>
 
               <div className="p-6">

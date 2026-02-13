@@ -274,22 +274,19 @@ export default function PortfolioPage() {
           </div>
         </div>
       ) : (
-        // Layout corrigido: coluna esquerda com cards empilhados + coluna direita com tabela
+        // Layout corrigido: esquerda Balance, direita Holdings → Assets → Top Performers
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          {/* Coluna esquerda - Cards empilhados na ordem correta */}
+          {/* Coluna esquerda - Balance Card intacto */}
           <div className="flex flex-col gap-6">
-            {/* 1º - Holdings Allocation (primeiro card conforme solicitado) */}
-            <HoldingsAllocationCard assets={allocationAssets} />
-
-            {/* 2º - Balance Card */}
             <BalanceCardFilled summary={data.summary} />
-
-            {/* 3º - Top Performers */}
-            <TopPerformersCard assets={data.assets} />
           </div>
 
-          {/* Coluna direita - Your Assets / Transactions com botão Add Asset DENTRO */}
-          <div className="lg:row-span-3">
+          {/* Coluna direita - Cards empilhados: Holdings primeiro, depois Assets, depois Top Performers */}
+          <div className="flex flex-col gap-6">
+            {/* 1º - Holdings Allocation (primeiro card no lado direito) */}
+            <HoldingsAllocationCard assets={allocationAssets} />
+
+            {/* 2º - Your Assets / Transactions com botão Add Asset DENTRO */}
             <Card className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] p-0 overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
                 <div className="flex items-center gap-2">
@@ -344,6 +341,9 @@ export default function PortfolioPage() {
                 )}
               </div>
             </Card>
+
+            {/* 3º - Top Performers (último card no lado direito) */}
+            <TopPerformersCard assets={data.assets} />
           </div>
         </div>
       )}

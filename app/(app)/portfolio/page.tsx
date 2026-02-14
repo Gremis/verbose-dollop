@@ -71,7 +71,7 @@ function BalanceCardFilled({ summary: s }: { summary: Summary }) {
     <Card className="rounded-[14px] shadow-[0_8px_20px_rgba(0,0,0,0.04)] flex flex-col p-6">
       <div className="flex items-center justify-between mb-2">
         <div className="text-[15px] font-medium text-slate-400 flex items-center gap-2">
-          Current Balance <span className="text-base">🙈</span>
+          Current Balance
         </div>
         <div className="text-[15px] font-medium text-slate-500 flex items-center gap-1">
           24h <span className="text-xs">▾</span>
@@ -83,7 +83,6 @@ function BalanceCardFilled({ summary: s }: { summary: Summary }) {
       </div>
 
       <div className="text-[15px]">
-        {/* Linha do 24h change */}
         <div className="flex items-center gap-3 mb-3">
           <span
             className={cls(
@@ -165,7 +164,6 @@ export default function PortfolioPage() {
     "assets",
   );
 
-  // NOVO: Estado para controlar qual asset está selecionado
   const [selectedAsset, setSelectedAsset] = useState<string | null>(null);
 
   async function load() {
@@ -198,19 +196,15 @@ export default function PortfolioPage() {
     }));
   }, [data?.assets]);
 
-  // Se um asset está selecionado, mostra o detalhe
   if (selectedAsset) {
     return (
       <div className="p-4 md:p-8">
-        {/* Layout responsivo correto */}
         <div className="grid grid-cols-1 xl:grid-cols-[340px_1fr] gap-6">
-          {/* Sidebar - Cards fixos */}
           <div className="flex flex-col gap-6">
-            {data && <BalanceCardFilled summary={data.summary} />}
-            {data && <TopPerformersCard assets={data.assets} />}
+          {data && <BalanceCardFilled summary={data.summary} />}
+          {data && <TopPerformersCard assets={data.assets} />}
           </div>
 
-          {/* Main content - Asset Detail */}
           <div>
             <AssetDetailView
               symbol={selectedAsset}
@@ -222,10 +216,21 @@ export default function PortfolioPage() {
     );
   }
 
-  // View normal (lista de assets)
   return (
     <div className="p-8">
-      {/* Removido o header com botão Add Asset do topo */}
+      <div className="flex items-center justify-between mb-8">
+        <div className="flex items-center gap-3">
+        </div>
+
+        <div className="flex items-center gap-4">
+          <button
+            className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700"
+            onClick={() => setModalOpen(true)}
+          >
+            + Add Asset
+          </button>
+        </div>
+      </div>
 
       {loading ? (
         <Card className="p-6">Loading…</Card>
@@ -274,19 +279,15 @@ export default function PortfolioPage() {
           </div>
         </div>
       ) : (
-        // Layout corrigido: esquerda Balance, direita Holdings → Assets → Top Performers
         <div className="grid gap-6 lg:grid-cols-[320px_1fr]">
-          {/* Coluna esquerda - Balance Card intacto */}
           <div className="flex flex-col gap-6">
             <BalanceCardFilled summary={data.summary} />
+            <TopPerformersCard assets={data.assets} />
           </div>
 
-          {/* Coluna direita - Cards empilhados: Holdings primeiro, depois Assets, depois Top Performers */}
           <div className="flex flex-col gap-6">
-            {/* 1º - Holdings Allocation (primeiro card no lado direito) */}
             <HoldingsAllocationCard assets={allocationAssets} />
 
-            {/* 2º - Your Assets / Transactions com botão Add Asset DENTRO */}
             <Card className="rounded-2xl shadow-[0_10px_30px_rgba(15,23,42,0.06)] p-0 overflow-hidden">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-200">
                 <div className="flex items-center gap-2">
@@ -314,14 +315,6 @@ export default function PortfolioPage() {
                     Transactions
                   </button>
                 </div>
-
-                {/* Botão Add Asset movido para DENTRO do card */}
-                <button
-                  className="px-[18px] py-[10px] rounded-[10px] bg-blue-600 text-white font-semibold hover:bg-blue-700"
-                  onClick={() => setModalOpen(true)}
-                >
-                  + Add Asset
-                </button>
               </div>
 
               <div className="p-6">
@@ -341,9 +334,6 @@ export default function PortfolioPage() {
                 )}
               </div>
             </Card>
-
-            {/* 3º - Top Performers (último card no lado direito) */}
-            <TopPerformersCard assets={data.assets} />
           </div>
         </div>
       )}

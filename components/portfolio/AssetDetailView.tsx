@@ -309,15 +309,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
               ))}
             </div>
           </div>
-
-          <div className="flex items-center justify-between mt-4 pt-4 border-t border-slate-200">
-            <div className="text-sm text-slate-500 font-semibold">
-              Source: Pivot / S/R engine
-            </div>
-            <button className="px-3 py-2 bg-slate-100 hover:bg-slate-200 rounded-xl text-sm font-semibold border border-slate-200">
-              View Zones
-            </button>
-          </div>
         </Card>
       </div>
 

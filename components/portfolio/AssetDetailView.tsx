@@ -208,7 +208,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
             <div>
               <div className="font-bold text-lg mb-1">Key Levels</div>
               <div className="text-sm text-slate-500 font-semibold">
-                Next support & resistance (with 2 more queued)
+                Next support & resistance
               </div>
             </div>
             <span className="px-3 py-1 bg-slate-100 rounded-full text-xs font-semibold text-slate-600 border border-slate-200">
@@ -217,18 +217,18 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {/* Supports */}
+            {/* Supports - apenas o primeiro */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 relative overflow-hidden">
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 rounded-l-xl" />
 
               <div className="flex items-center justify-between mb-3">
-                <div className="font-bold">Supports</div>
+                <div className="font-bold">Support</div>
                 <div className="text-xs text-slate-500 font-semibold">
                   Below price
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-xl p-3 mb-3">
+              <div className="bg-white border border-slate-200 rounded-xl p-3">
                 <div className="text-xs text-slate-500 font-bold mb-1">
                   Next Support
                 </div>
@@ -244,37 +244,20 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                   </span>
                 </div>
               </div>
-
-              {data.keyLevels.supports.slice(1).map((level, i) => (
-                <div
-                  key={i}
-                  className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between mb-2 last:mb-0"
-                >
-                  <div>
-                    <div className="font-bold">{usd(level.price)}</div>
-                    <div className="text-xs text-slate-500 font-bold">
-                      Support #{i + 2}
-                    </div>
-                  </div>
-                  <span className="px-2 py-1 bg-slate-100 rounded-full text-xs font-semibold border border-slate-200">
-                    {level.timeframe}
-                  </span>
-                </div>
-              ))}
             </div>
 
-            {/* Resistances */}
+            {/* Resistances - apenas a primeira */}
             <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 relative overflow-hidden">
               <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl" />
 
               <div className="flex items-center justify-between mb-3">
-                <div className="font-bold">Resistances</div>
+                <div className="font-bold">Resistance</div>
                 <div className="text-xs text-slate-500 font-semibold">
                   Above price
                 </div>
               </div>
 
-              <div className="bg-white border border-slate-200 rounded-xl p-3 mb-3">
+              <div className="bg-white border border-slate-200 rounded-xl p-3">
                 <div className="text-xs text-slate-500 font-bold mb-1">
                   Next Resistance
                 </div>
@@ -290,23 +273,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                   </span>
                 </div>
               </div>
-
-              {data.keyLevels.resistances.slice(1).map((level, i) => (
-                <div
-                  key={i}
-                  className="bg-white border border-slate-200 rounded-xl p-3 flex items-center justify-between mb-2 last:mb-0"
-                >
-                  <div>
-                    <div className="font-bold">{usd(level.price)}</div>
-                    <div className="text-xs text-slate-500 font-bold">
-                      Resistance #{i + 2}
-                    </div>
-                  </div>
-                  <span className="px-2 py-1 bg-slate-100 rounded-full text-xs font-semibold border border-slate-200">
-                    {level.timeframe}
-                  </span>
-                </div>
-              ))}
             </div>
           </div>
         </Card>

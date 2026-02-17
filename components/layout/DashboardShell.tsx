@@ -38,6 +38,9 @@ export default function DashboardShell({ children }: Props) {
 
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
+  // Grupo Trading Journal expandido por padrão
+  const [tradingGroupOpen, setTradingGroupOpen] = useState(true);
+
   const pathname = usePathname();
 
   const openComingSoon = (e?: React.MouseEvent) => {
@@ -115,7 +118,7 @@ export default function DashboardShell({ children }: Props) {
                 Strategy Creator
               </Link>
               <Link href="/exit-strategy" className="opacity-90">
-                Exit Strategy
+                Exit Strategy Simulator
               </Link>
               {isAdmin && (
                 <Link href="/admin" className="opacity-90">
@@ -198,7 +201,7 @@ export default function DashboardShell({ children }: Props) {
                           className="block rounded-xl px-3 py-2 hover:bg-white/20"
                           onClick={() => setMobileOpen(false)}
                         >
-                          Exit Strategy
+                          Exit Strategy Simulator
                         </Link>
                       </li>
                       {isAdmin && (
@@ -335,6 +338,7 @@ export default function DashboardShell({ children }: Props) {
 
             <nav className="px-2 pb-4">
               <ul className="grid gap-1">
+                {/* Home */}
                 <NavItem
                   href="/dashboard"
                   label="Home"
@@ -342,41 +346,107 @@ export default function DashboardShell({ children }: Props) {
                   showText={sidebarExpanded}
                   pathname={pathname}
                 />
-                <NavItem
-                  href="/portfolio"
-                  label="Portfolio Manager"
-                  icon="💼"
-                  showText={sidebarExpanded}
-                  pathname={pathname}
-                />
-                <NavItem
-                  href="/journal"
-                  label="Trading Journal"
-                  icon="🗒️"
-                  showText={sidebarExpanded}
-                  pathname={pathname}
-                />
-                <NavItem
-                  href="/strategies"
-                  label="Strategy Creator"
-                  icon="🧭"
-                  showText={sidebarExpanded}
-                  pathname={pathname}
-                />
+
+                {/* Trading Journal - item pai com grupo expandível */}
+                <li>
+                  <div className="flex items-center">
+                    <Link
+                      href="/journal"
+                      className={`flex-1 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
+                        pathname === "/journal"
+                          ? "bg-purple-50 text-purple-700"
+                          : "text-gray-700 hover:bg-gray-50"
+                      }`}
+                    >
+                      <span className="w-5 text-center flex-shrink-0 text-lg">
+                        🗒️
+                      </span>
+                      <span
+                        className="whitespace-nowrap text-sm font-medium overflow-hidden transition-all duration-300"
+                        style={{
+                          width: sidebarExpanded ? "auto" : "0",
+                          opacity: sidebarExpanded ? 1 : 0,
+                        }}
+                      >
+                        Trading Journal
+                      </span>
+                    </Link>
+
+                    {/* Botão expandir/colapsar - só aparece quando sidebar está expandida */}
+                    {sidebarExpanded && (
+                      <button
+                        onClick={() => setTradingGroupOpen((v) => !v)}
+                        className="flex items-center justify-center h-8 w-8 rounded-lg hover:bg-gray-100 transition-colors text-gray-400 mr-1 flex-shrink-0"
+                        title={
+                          tradingGroupOpen ? "Collapse group" : "Expand group"
+                        }
+                      >
+                        <svg
+                          width="18"
+                          height="18"
+                          viewBox="0 0 24 24"
+                          fill="none"
+                          stroke="currentColor"
+                          strokeWidth="2.5"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          className={`transition-transform duration-200 ${
+                            tradingGroupOpen ? "rotate-180" : "rotate-0"
+                          }`}
+                        >
+                          <path d="M6 9l6 6 6-6" />
+                        </svg>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Itens filhos */}
+                  {tradingGroupOpen && sidebarExpanded && (
+                    <ul className="mt-1 ml-4 grid gap-1 border-l-2 border-gray-100 pl-2">
+                      <NavItem
+                        href="/portfolio"
+                        label="Portfolio Manager"
+                        icon="💼"
+                        showText={sidebarExpanded}
+                        pathname={pathname}
+                      />
+                      <NavItem
+                        href="/strategies"
+                        label="Strategy Creator"
+                        icon="🧭"
+                        showText={sidebarExpanded}
+                        pathname={pathname}
+                      />
+                      <NavItem
+                        href="/trade-analyzer"
+                        label="Trade Analyzer"
+                        icon="📈"
+                        showText={sidebarExpanded}
+                        pathname={pathname}
+                      />
+                    </ul>
+                  )}
+                </li>
+
+                {/* Exit Strategy Simulator - item separado */}
                 <NavItem
                   href="/exit-strategy"
-                  label="Exit Strategy"
+                  label="Exit Strategy Simulator"
                   icon="🚪"
                   showText={sidebarExpanded}
                   pathname={pathname}
                 />
+
+                {/* Coin Tracker */}
                 <NavItem
-                  href="/trade-analyzer"
-                  label="Trade Analyzer"
-                  icon="📈"
+                  href="/add-coin"
+                  label="Coin Tracker"
+                  icon="🔍"
                   showText={sidebarExpanded}
                   pathname={pathname}
                 />
+
+                {/* Admin */}
                 {isAdmin && (
                   <NavItem
                     href="/admin"
@@ -386,13 +456,6 @@ export default function DashboardShell({ children }: Props) {
                     pathname={pathname}
                   />
                 )}
-                <NavItem
-                  href="/add-coin"
-                  label="Coin Tracker"
-                  icon="🔍"
-                  showText={sidebarExpanded}
-                  pathname={pathname}
-                />
               </ul>
             </nav>
           </div>

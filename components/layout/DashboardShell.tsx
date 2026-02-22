@@ -38,6 +38,9 @@ export default function DashboardShell({ children }: Props) {
 
   const [sidebarExpanded, setSidebarExpanded] = useState(true);
 
+  const [tradingGroupOpen, setTradingGroupOpen] = useState(true);
+  const [portfolioGroupOpen, setPortfolioGroupOpen] = useState(true);
+
   const pathname = usePathname();
 
   const openComingSoon = (e?: React.MouseEvent) => {
@@ -66,173 +69,118 @@ export default function DashboardShell({ children }: Props) {
     return () => window.removeEventListener("scroll", handleScroll);
   }, []);
 
+  const tradingGroupActive =
+    pathname === "/journal" ||
+    pathname === "/strategies" ||
+    pathname === "/trade-analyzer";
+
+  const portfolioGroupActive =
+    pathname === "/portfolio" || pathname === "/exit-strategy";
+
+  const topNavLinkBase =
+    "text-sm px-3 py-2 rounded-xl transition-colors whitespace-nowrap";
+  const topNavInactive = "text-[#6B6777] hover:bg-white";
+  const topNavActive = "bg-[#F1EAFE] text-[#7C3AED] font-semibold";
+
+  const isTopActive = (href: string) => pathname === href;
+
   return (
     <div className="min-h-dvh bg-gray-50">
-      {/* TOP NAVBAR (bounded like mockup: grows until 1536px, then stops) */}
-      <div
-        className="relative text-gray-700"
-        style={{ backgroundColor: "#F6F6F8" }}
-      >
-        {/* Container: stops expanding on very large screens */}
-        <div className="mx-auto w-full max-w-[1536px] px-6 py-4">
-          <div className="flex items-center gap-4">
-            {/* LEFT: Logo */}
-            <div className="flex-none">
+      <header className="sticky top-0 z-40 bg-white/90 backdrop-blur border-b border-[#E9E6F2] text-[#14121A]">
+        <div className="mx-auto max-w-7xl px-4 md:px-6 py-3">
+          <div className="relative flex items-center justify-between gap-4">
+            <div className="flex items-center gap-6 min-w-0">
               <Link
                 href="/"
-                className="inline-flex items-center gap-3"
+                className="flex items-center gap-3"
                 aria-label="Stakk AI – Home"
                 title="Stakk AI"
               >
-                {/* Logo icon (keep your final svg here) */}
-                <svg
-                  width="34"
-                  height="34"
-                  viewBox="0 0 32 32"
-                  fill="none"
-                  xmlns="http://www.w3.org/2000/svg"
-                  aria-label="Stakk AI logo"
-                  role="img"
-                >
-                  <defs>
-                    <linearGradient
-                      id="bg"
-                      x1="6"
-                      y1="4"
-                      x2="28"
-                      y2="30"
-                      gradientUnits="userSpaceOnUse"
-                    >
-                      <stop offset="0" stopColor="#E9D5FF" />
-                      <stop offset="0.45" stopColor="#C084FC" />
-                      <stop offset="0.75" stopColor="#A855F7" />
-                      <stop offset="1" stopColor="#7C3AED" />
-                    </linearGradient>
-                    <radialGradient
-                      id="gloss"
-                      cx="0"
-                      cy="0"
-                      r="1"
-                      gradientUnits="userSpaceOnUse"
-                      gradientTransform="translate(11 9) rotate(135) scale(18 18)"
-                    >
-                      <stop offset="0" stopColor="#FFFFFF" stopOpacity="0.55" />
-                      <stop
-                        offset="0.55"
-                        stopColor="#FFFFFF"
-                        stopOpacity="0.12"
-                      />
-                      <stop offset="1" stopColor="#FFFFFF" stopOpacity="0" />
-                    </radialGradient>
-                  </defs>
-
-                  <rect
-                    x="1.25"
-                    y="1.25"
-                    width="29.5"
-                    height="29.5"
-                    rx="10.5"
-                    fill="url(#bg)"
-                  />
-                  <rect
-                    x="1.25"
-                    y="1.25"
-                    width="29.5"
-                    height="29.5"
-                    rx="10.5"
-                    fill="url(#gloss)"
-                  />
-
-                  {/* White mark (placeholder) */}
-                  <g transform="translate(16 16) rotate(35) translate(-16 -16)">
-                    <path
-                      d="M11.1 9.7 L21.3 9.2 L22.9 21.0 L12.7 21.5 Z"
-                      fill="#FFFFFF"
-                    />
-                  </g>
-                </svg>
-
-                {/* Logo text */}
-                <div className="flex items-center gap-1.5">
-                  <span
-                    className="font-extrabold leading-none tracking-tight"
-                    style={{ fontSize: 22, color: "#0F1220" }}
-                  >
-                    Stakk
-                  </span>
-
-                  <span
-                    className="font-extrabold leading-none tracking-tight bg-clip-text text-transparent"
-                    style={{
-                      fontSize: 22,
-                      backgroundImage:
-                        "linear-gradient(90deg, #7C3AED 0%, #A855F7 100%)",
-                    }}
-                  >
-                    AI
-                  </span>
+                <div className="h-9 w-9 rounded-[12px] bg-[radial-gradient(circle_at_30%_30%,#B49BFF,#7C3AED)] shadow-[0_10px_22px_rgba(124,58,237,0.25)] relative overflow-hidden">
+                  <div className="absolute inset-[9px] rounded-[10px] bg-white/70 rotate-[14deg] [clip-path:polygon(0_40%,55%_0,100%_40%,55%_100%)]" />
                 </div>
+                <span className="font-extrabold tracking-[0.02em] text-[18px]">
+                  Stakk <b className="text-[#7C3AED] font-extrabold">AI</b>
+                </span>
               </Link>
-            </div>
 
-            {/* CENTER: Desktop nav centered (takes middle space) */}
-            <div className="hidden xl:flex flex-1 justify-center">
-              <nav className="flex items-center gap-3">
-                <NavLink href="/dashboard" label="Home" pathname={pathname} />
-                <NavLink
+              <nav
+                className="hidden lg:flex items-center gap-2 text-[14px]"
+                aria-label="Primary navigation"
+              >
+                <Link
+                  href="/dashboard"
+                  className={`${topNavLinkBase} ${
+                    isTopActive("/dashboard") ? topNavActive : topNavInactive
+                  }`}
+                >
+                  Home
+                </Link>
+                <Link
                   href="/journal"
-                  label="Trading Journal"
-                  pathname={pathname}
-                />
-                <NavLink
+                  className={`${topNavLinkBase} ${
+                    isTopActive("/journal") ? topNavActive : topNavInactive
+                  }`}
+                >
+                  Trading Journal
+                </Link>
+                <Link
                   href="/strategies"
-                  label="Strategy Creator"
-                  pathname={pathname}
-                />
-                <NavLink
+                  className={`${topNavLinkBase} ${
+                    isTopActive("/strategies") ? topNavActive : topNavInactive
+                  }`}
+                >
+                  Strategy Creator
+                </Link>
+                <Link
                   href="/exit-strategy"
-                  label="Exit Strategy"
-                  pathname={pathname}
-                />
-                <NavLink
+                  className={`${topNavLinkBase} ${
+                    isTopActive("/exit-strategy")
+                      ? topNavActive
+                      : topNavInactive
+                  }`}
+                >
+                  Exit Strategy
+                </Link>
+                <Link
                   href="/trade-analyzer"
-                  label="Trade Analyzer"
-                  pathname={pathname}
-                />
+                  className={`${topNavLinkBase} ${
+                    isTopActive("/trade-analyzer")
+                      ? topNavActive
+                      : topNavInactive
+                  }`}
+                >
+                  Trade Analyzer
+                </Link>
                 {isAdmin && (
-                  <NavLink href="/admin" label="Admin" pathname={pathname} />
+                  <Link
+                    href="/admin"
+                    className={`${topNavLinkBase} ${
+                      isTopActive("/admin") ? topNavActive : topNavInactive
+                    }`}
+                  >
+                    Admin
+                  </Link>
                 )}
               </nav>
             </div>
 
-            {/* RIGHT: Actions */}
-            <div className="flex items-center gap-3 flex-none ml-auto">
+            <div className="flex items-center gap-2">
               <button
                 onClick={() => setAccOpen(true)}
-                className="hidden sm:inline-flex items-center gap-2 rounded-full bg-white border px-4 py-2.5 shadow-sm hover:shadow-md transition-all"
-                style={{ borderColor: "#E9E7F2" }}
+                className="hidden sm:inline-flex items-center gap-2 rounded-full border border-[#E9E6F2] bg-white px-3 py-2 text-[13px] text-[#6B6777] shadow-[0_6px_16px_rgba(20,18,26,0.04)] cursor-pointer"
                 title="Switch account"
               >
-                {/* Accounts icon (single star) */}
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                  <path
-                    d="M12 2.8l1.8 5.1 5.2 1.9-5.2 1.9L12 16.8l-1.8-5.1-5.2-1.9 5.2-1.9L12 2.8z"
-                    fill="#8B5CF6"
-                  />
-                </svg>
-                <span className="text-gray-600 text-sm font-medium">
-                  Accounts
-                </span>
+                <span className="text-[#6D28D9] font-black text-base">⎈</span>
+                <span>Accounts</span>
               </button>
 
-              {/* Profile */}
               <div className="relative">
                 <button
                   onClick={() => setOpenProfile((v) => !v)}
-                  className="flex items-center gap-2.5 rounded-full bg-white border px-4 py-2.5 shadow-sm hover:shadow-md transition-all"
-                  style={{ borderColor: "#E9E7F2" }}
+                  className="flex items-center gap-2 rounded-full border border-[#E9E6F2] bg-white px-3 py-2 text-[13px] text-[#14121A] shadow-[0_6px_16px_rgba(20,18,26,0.04)] cursor-pointer"
                 >
-                  <span className="h-7 w-7 rounded-full bg-violet-500 grid place-items-center overflow-hidden relative text-white text-xs font-semibold">
+                  <span className="h-7 w-7 rounded-full bg-gradient-to-br from-[#B49BFF] to-[#7C3AED] grid place-items-center overflow-hidden relative text-[11px] font-extrabold text-white">
                     {data?.user?.image ? (
                       <Image
                         src={data.user.image}
@@ -245,22 +193,21 @@ export default function DashboardShell({ children }: Props) {
                       avatarText
                     )}
                   </span>
-
-                  <span className="hidden sm:inline font-bold text-gray-900 text-sm">
+                  <span className="hidden sm:inline font-semibold truncate max-w-[140px]">
                     {displayName}
                   </span>
                 </button>
 
                 {openProfile && (
                   <div
-                    className="absolute right-0 mt-2 w-64 bg-white text-gray-800 rounded-2xl shadow-xl p-2 z-50 border"
-                    style={{ borderColor: "#E9E7F2" }}
+                    className="absolute right-0 mt-2 w-64 bg-white text-gray-800 rounded-2xl shadow-xl p-2 z-50 border border-gray-100"
                     onMouseLeave={() => setOpenProfile(false)}
                   >
                     <div className="px-3 py-2 text-sm text-gray-500">
                       Hi, {displayName.split(" ")[0]}!
                     </div>
                     <MenuItem href="/profile" label="My profile" emoji="🙋‍♂️" />
+
                     <button
                       className="w-full text-left flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-gray-100 cursor-pointer"
                       onClick={() => signOut({ callbackUrl: "/login" })}
@@ -271,107 +218,179 @@ export default function DashboardShell({ children }: Props) {
                 )}
               </div>
 
-              {/* Mobile hamburger */}
               <button
-                className="inline-flex flex-col items-center justify-center rounded-xl border bg-white px-3 py-2 xl:hidden cursor-pointer"
-                style={{ borderColor: "#E9E7F2" }}
+                className="inline-flex lg:hidden flex-col items-center justify-center rounded-full border border-[#E9E6F2] bg-white p-2 shadow-[0_6px_16px_rgba(20,18,26,0.04)] cursor-pointer"
                 onClick={() => setMobileOpen((v) => !v)}
                 aria-label="Open menu"
                 aria-expanded={mobileOpen}
                 aria-controls="mobile-nav"
               >
-                <span className="block h-0.5 w-5 bg-gray-700 mb-1.5" />
-                <span className="block h-0.5 w-5 bg-gray-700 mb-1.5" />
-                <span className="block h-0.5 w-5 bg-gray-700" />
+                <span className="block h-0.5 w-5 bg-[#14121A] mb-1.5 rounded-full" />
+                <span className="block h-0.5 w-5 bg-[#14121A] mb-1.5 rounded-full" />
+                <span className="block h-0.5 w-5 bg-[#14121A] rounded-full" />
               </button>
             </div>
-          </div>
 
-          {/* Mobile dropdown (aligned to same container width) */}
-          {mobileOpen && (
-            <>
-              <div
-                className="fixed inset-0 z-[45] bg-black/30 xl:hidden"
-                onClick={() => setMobileOpen(false)}
-              />
-              <div
-                id="mobile-nav"
-                className="absolute left-0 right-0 top-full z-50 xl:hidden border-t backdrop-blur-sm"
-                style={{
-                  backgroundColor: "#F6F6F8",
-                  borderColor: "#E9E7F2",
-                }}
-              >
-                <div className="mx-auto w-full max-w-[1536px] px-6 py-3">
-                  <ul className="grid gap-2 text-gray-700 animate-[fadeDown_160ms_ease-out]">
-                    <li>
-                      <Link
-                        href="/dashboard"
-                        className="block rounded-xl px-3 py-2 hover:bg-white/60"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        Home
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/journal"
-                        className="block rounded-xl px-3 py-2 hover:bg-white/60"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        Trading Journal
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/strategies"
-                        className="block rounded-xl px-3 py-2 hover:bg-white/60"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        Strategy Creator
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/exit-strategy"
-                        className="block rounded-xl px-3 py-2 hover:bg-white/60"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        Exit Strategy
-                      </Link>
-                    </li>
-                    <li>
-                      <Link
-                        href="/trade-analyzer"
-                        className="block rounded-xl px-3 py-2 hover:bg-white/60"
-                        onClick={() => setMobileOpen(false)}
-                      >
-                        Trade Analyzer
-                      </Link>
-                    </li>
-                    {isAdmin && (
+            {mobileOpen && (
+              <>
+                <div
+                  className="fixed inset-0 z-[45] bg-black/30 lg:hidden"
+                  onClick={() => setMobileOpen(false)}
+                />
+                <div
+                  id="mobile-nav"
+                  className="absolute left-0 right-0 top-full z-50 lg:hidden border-t border-[#E9E6F2] bg-gradient-to-b from-white via-[#F7F4FF] to-[#EFE9FF] backdrop-blur shadow-[0_18px_40px_rgba(20,18,26,0.22)] rounded-b-2xl"
+                >
+                  <div className="mx-auto max-w-7xl px-4 md:px-6 py-3">
+                    <ul className="grid gap-2 text-sm animate-[fadeDown_160ms_ease-out]">
                       <li>
                         <Link
-                          href="/admin"
-                          className="block rounded-xl px-3 py-2 hover:bg-white/60"
+                          href="/dashboard"
                           onClick={() => setMobileOpen(false)}
+                          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                            isTopActive("/dashboard")
+                              ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
+                              : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
+                          }`}
                         >
-                          Admin
+                          <div className="flex items-center gap-3">
+                            <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
+                              🏠
+                            </span>
+                            <span className="font-medium">Home</span>
+                          </div>
+                          <span className="text-xs text-[#9C92D4]">
+                            {isTopActive("/dashboard") ? "Current" : ""}
+                          </span>
                         </Link>
                       </li>
-                    )}
-                  </ul>
+
+                      <li>
+                        <Link
+                          href="/journal"
+                          onClick={() => setMobileOpen(false)}
+                          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                            isTopActive("/journal")
+                              ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
+                              : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
+                              🗒️
+                            </span>
+                            <span className="font-medium">Trading Journal</span>
+                          </div>
+                          <span className="text-xs text-[#9C92D4]">
+                            {isTopActive("/journal") ? "Current" : ""}
+                          </span>
+                        </Link>
+                      </li>
+
+                      <li>
+                        <Link
+                          href="/strategies"
+                          onClick={() => setMobileOpen(false)}
+                          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                            isTopActive("/strategies")
+                              ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
+                              : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
+                              🧭
+                            </span>
+                            <span className="font-medium">
+                              Strategy Creator
+                            </span>
+                          </div>
+                          <span className="text-xs text-[#9C92D4]">
+                            {isTopActive("/strategies") ? "Current" : ""}
+                          </span>
+                        </Link>
+                      </li>
+
+                      <li>
+                        <Link
+                          href="/exit-strategy"
+                          onClick={() => setMobileOpen(false)}
+                          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                            isTopActive("/exit-strategy")
+                              ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
+                              : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
+                              🚪
+                            </span>
+                            <span className="font-medium">Exit Strategy</span>
+                          </div>
+                          <span className="text-xs text-[#9C92D4]">
+                            {isTopActive("/exit-strategy") ? "Current" : ""}
+                          </span>
+                        </Link>
+                      </li>
+
+                      <li>
+                        <Link
+                          href="/trade-analyzer"
+                          onClick={() => setMobileOpen(false)}
+                          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                            isTopActive("/trade-analyzer")
+                              ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
+                              : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
+                          }`}
+                        >
+                          <div className="flex items-center gap-3">
+                            <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
+                              📈
+                            </span>
+                            <span className="font-medium">Trade Analyzer</span>
+                          </div>
+                          <span className="text-xs text-[#9C92D4]">
+                            {isTopActive("/trade-analyzer") ? "Current" : ""}
+                          </span>
+                        </Link>
+                      </li>
+
+                      {isAdmin && (
+                        <li>
+                          <Link
+                            href="/admin"
+                            onClick={() => setMobileOpen(false)}
+                            className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                              isTopActive("/admin")
+                                ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
+                                : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
+                            }`}
+                          >
+                            <div className="flex items-center gap-3">
+                              <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
+                                🛡️
+                              </span>
+                              <span className="font-medium">Admin</span>
+                            </div>
+                            <span className="text-xs text-[#9C92D4]">
+                              {isTopActive("/admin") ? "Current" : ""}
+                            </span>
+                          </Link>
+                        </li>
+                      )}
+                    </ul>
+                  </div>
                 </div>
-              </div>
-            </>
-          )}
+              </>
+            )}
+          </div>
         </div>
-      </div>
+      </header>
 
       <div className="mx-auto w-full max-w-7xl md:max-w-none px-4 md:px-6 py-6 relative">
         <aside
           className={`hidden md:block fixed left-0 bottom-0 z-40 transition-all duration-300 ease-in-out bg-white shadow-lg ${
-            isScrolled ? "top-0" : "top-[72px]"
+            isScrolled ? "top-0" : "top-[88px]"
           }`}
           onMouseEnter={() => setSidebarExpanded(true)}
           style={{
@@ -427,73 +446,51 @@ export default function DashboardShell({ children }: Props) {
                   showText={sidebarExpanded}
                   pathname={pathname}
                 />
-                <li>
-                  <div className="flex items-center">
-                    <Link
-                      href="/journal"
-                      className={`flex-1 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
-                        pathname === "/journal"
-                          ? "bg-purple-50 text-purple-700"
-                          : "text-gray-700 hover:bg-gray-50"
-                      }`}
-                    >
-                      <span className="w-5 text-center flex-shrink-0 text-lg">
-                        🗒️
-                      </span>
-                      <span
-                        className="whitespace-nowrap text-sm font-medium overflow-hidden transition-all duration-300"
-                        style={{
-                          width: sidebarExpanded ? "auto" : "0",
-                          opacity: sidebarExpanded ? 1 : 0,
-                        }}
-                      >
-                        Trading Journal
-                      </span>
-                    </Link>
-                  </div>
 
-                  {sidebarExpanded && (
-                    <ul className="mt-1 ml-4 grid gap-1 border-l-2 border-gray-100 pl-2">
-                      <NavItem
-                        href="/portfolio"
-                        label="Portfolio Manager"
-                        icon="💼"
-                        showText={sidebarExpanded}
-                        pathname={pathname}
-                      />
-                      <NavItem
-                        href="/strategies"
-                        label="Strategy Creator"
-                        icon="🧭"
-                        showText={sidebarExpanded}
-                        pathname={pathname}
-                      />
-                      <NavItem
-                        href="/trade-analyzer"
-                        label="Trade Analyzer"
-                        icon="📈"
-                        showText={sidebarExpanded}
-                        pathname={pathname}
-                      />
-                    </ul>
-                  )}
-                </li>
-
-                <NavItem
-                  href="/exit-strategy"
-                  label="Exit Strategy Simulator"
-                  icon="🚪"
+                <NavGroup
+                  href="/portfolio"
+                  label="Portfolio Manager"
+                  icon="💼"
                   showText={sidebarExpanded}
                   pathname={pathname}
-                />
+                  open={portfolioGroupOpen}
+                  setOpen={setPortfolioGroupOpen}
+                  isActiveGroup={portfolioGroupActive}
+                >
+                  <NavChildItem
+                    href="/exit-strategy"
+                    label="Exit Strategy Simulator"
+                    icon="🚪"
+                    showText={sidebarExpanded}
+                    pathname={pathname}
+                  />
+                </NavGroup>
 
-                <NavItem
-                  href="/add-coin"
-                  label="Coin Tracker"
-                  icon="🔍"
+                <NavGroup
+                  href="/journal"
+                  label="Trading Journal"
+                  icon="🗒️"
                   showText={sidebarExpanded}
                   pathname={pathname}
-                />
+                  open={tradingGroupOpen}
+                  setOpen={setTradingGroupOpen}
+                  isActiveGroup={tradingGroupActive}
+                >
+                  <NavChildItem
+                    href="/strategies"
+                    label="Strategy Creator"
+                    icon="🧭"
+                    showText={sidebarExpanded}
+                    pathname={pathname}
+                  />
+                  <NavChildItem
+                    href="/trade-analyzer"
+                    label="Trade Analyzer"
+                    icon="📈"
+                    showText={sidebarExpanded}
+                    pathname={pathname}
+                  />
+                </NavGroup>
 
                 {isAdmin && (
                   <NavItem
@@ -504,6 +501,14 @@ export default function DashboardShell({ children }: Props) {
                     pathname={pathname}
                   />
                 )}
+
+                <NavItem
+                  href="/add-coin"
+                  label="Coin Tracker"
+                  icon="🔍"
+                  showText={sidebarExpanded}
+                  pathname={pathname}
+                />
               </ul>
             </nav>
           </div>
@@ -574,40 +579,6 @@ export default function DashboardShell({ children }: Props) {
   );
 }
 
-function NavLink({
-  href,
-  label,
-  pathname,
-}: {
-  href: string;
-  label: string;
-  pathname?: string;
-}) {
-  const isActive = pathname === href;
-
-  return (
-    <Link
-      href={href}
-      className={[
-        "px-4 py-2 rounded-full text-sm transition-all",
-        isActive
-          ? "font-semibold"
-          : "text-gray-500 hover:text-gray-800 hover:bg-white/60",
-      ].join(" ")}
-      style={
-        isActive
-          ? {
-              backgroundColor: "#EFE9FC",
-              color: "#7C3AED",
-            }
-          : undefined
-      }
-    >
-      {label}
-    </Link>
-  );
-}
-
 function NavItem({
   href,
   label,
@@ -644,6 +615,123 @@ function NavItem({
         >
           {label}
         </span>
+      </Link>
+    </li>
+  );
+}
+
+function NavGroup({
+  href,
+  label,
+  icon,
+  showText,
+  pathname,
+  open,
+  setOpen,
+  isActiveGroup,
+  children,
+}: {
+  href: string;
+  label: string;
+  icon: string;
+  showText: boolean;
+  pathname?: string;
+  open: boolean;
+  setOpen: React.Dispatch<React.SetStateAction<boolean>>;
+  isActiveGroup: boolean;
+  children: React.ReactNode;
+}) {
+  const isActive = pathname === href;
+
+  return (
+    <li className="select-none">
+      <div className="flex items-center">
+        <Link
+          href={href}
+          title={!showText ? label : undefined}
+          className={`flex-1 flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ${
+            isActive
+              ? "bg-purple-50 text-purple-700"
+              : "text-gray-700 hover:bg-gray-50"
+          }`}
+        >
+          <span className="w-5 text-center flex-shrink-0 text-lg">{icon}</span>
+
+          <span
+            className="whitespace-nowrap text-sm font-medium overflow-hidden transition-all duration-300"
+            style={{
+              width: showText ? "auto" : "0",
+              opacity: showText ? 1 : 0,
+            }}
+          >
+            {label}
+          </span>
+        </Link>
+
+        {showText && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              setOpen((v) => !v);
+            }}
+            className={`ml-1 h-10 w-10 grid place-items-center rounded-lg transition-colors ${
+              isActiveGroup ? "text-purple-700" : "text-gray-500"
+            } hover:bg-gray-50`}
+            aria-label={open ? `Collapse ${label}` : `Expand ${label}`}
+            title={open ? "Collapse" : "Expand"}
+          >
+            <svg
+              width="18"
+              height="18"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              className={`transition-transform ${open ? "rotate-180" : ""}`}
+            >
+              <path d="M6 9l6 6 6-6" />
+            </svg>
+          </button>
+        )}
+      </div>
+
+      {showText && open && <ul className="mt-1 grid gap-1">{children}</ul>}
+    </li>
+  );
+}
+
+function NavChildItem({
+  href,
+  label,
+  icon,
+  showText = true,
+  pathname,
+}: {
+  href: string;
+  label: string;
+  icon: string;
+  showText?: boolean;
+  pathname?: string;
+}) {
+  const isActive = pathname === href;
+
+  return (
+    <li>
+      <Link
+        className={`flex items-center gap-3 rounded-lg px-3 py-2.5 transition-colors ml-6 ${
+          isActive
+            ? "bg-purple-50 text-purple-700"
+            : "text-gray-700 hover:bg-gray-50"
+        }`}
+        href={href}
+        title={!showText ? label : undefined}
+      >
+        <span className="w-5 text-center flex-shrink-0 text-lg">{icon}</span>
+        <span className="whitespace-nowrap text-sm font-medium">{label}</span>
       </Link>
     </li>
   );

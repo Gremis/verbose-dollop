@@ -16,11 +16,6 @@ type PivotLevels = {
   s3: number;
 };
 
-/**
- * Busca dados OHLC do CoinGecko
- * @param coingeckoId - ID do ativo no CoinGecko (ex: "bitcoin")
- * @param days - Número de dias de histórico
- */
 async function fetchOHLC(
   coingeckoId: string,
   days: number,
@@ -40,7 +35,6 @@ async function fetchOHLC(
 
     const data = await res.json();
 
-    // CoinGecko retorna array de [timestamp, open, high, low, close]
     return data.map((candle: number[]) => ({
       timestamp: candle[0],
       open: candle[1],
@@ -54,12 +48,6 @@ async function fetchOHLC(
   }
 }
 
-/**
- * Calcula Pivot Points (Standard)
- * @param high - Preço máximo do período
- * @param low - Preço mínimo do período
- * @param close - Preço de fechamento do período
- */
 function calculatePivotPoints(
   high: number,
   low: number,
@@ -78,12 +66,6 @@ function calculatePivotPoints(
   return { pivot, r1, r2, r3, s1, s2, s3 };
 }
 
-/**
- * Calcula key levels para um ativo
- * @param coingeckoId - ID do ativo no CoinGecko
- * @param currentPrice - Preço atual do ativo
- */
-
 export async function calculateKeyLevels(
   coingeckoId: string | null,
   currentPrice: number,
@@ -91,7 +73,6 @@ export async function calculateKeyLevels(
   supports: Array<{ price: number; distance: string; timeframe: string }>;
   resistances: Array<{ price: number; distance: string; timeframe: string }>;
 }> {
-  // Fallback para mocks se não tiver coingeckoId
   if (!coingeckoId || currentPrice <= 0) {
     return {
       supports: [
@@ -108,7 +89,6 @@ export async function calculateKeyLevels(
   }
 
   try {
-    // Buscar 30 dias de uma vez só (1 chamada API)
     const ohlcData = await fetchOHLC(coingeckoId, 30);
 
     if (ohlcData.length === 0) {
@@ -126,7 +106,6 @@ export async function calculateKeyLevels(
       timeframe: string;
     }> = [];
 
-    // Calcular pivots diários (último dia)
     if (ohlcData.length >= 1) {
       const lastDay = ohlcData[ohlcData.length - 1];
       const dailyPivots = calculatePivotPoints(
@@ -148,7 +127,6 @@ export async function calculateKeyLevels(
       );
     }
 
-    // Calcular pivots semanais (últimos 7 dias)
     if (ohlcData.length >= 7) {
       const last7Days = ohlcData.slice(-7);
       const weekHigh = Math.max(...last7Days.map((d) => d.high));
@@ -168,7 +146,6 @@ export async function calculateKeyLevels(
       );
     }
 
-    // Calcular pivots mensais (últimos 30 dias - HTF)
     if (ohlcData.length >= 30) {
       const monthHigh = Math.max(...ohlcData.map((d) => d.high));
       const monthLow = Math.min(...ohlcData.map((d) => d.low));
@@ -193,27 +170,24 @@ export async function calculateKeyLevels(
       });
     }
 
-    // Filtrar e ordenar suportes (abaixo do preço atual)
     const supports = allSupports
       .filter((s) => s.price < currentPrice && s.price > 0)
-      .sort((a, b) => b.price - a.price) // Mais próximo primeiro
+      .sort((a, b) => b.price - a.price)
       .slice(0, 3)
       .map((s) => ({
         ...s,
         distance: `${(((currentPrice - s.price) / currentPrice) * 100).toFixed(1)}%`,
       }));
 
-    // Filtrar e ordenar resistências (acima do preço atual)
     const resistances = allResistances
       .filter((r) => r.price > currentPrice)
-      .sort((a, b) => a.price - b.price) // Mais próximo primeiro
+      .sort((a, b) => a.price - b.price) 
       .slice(0, 3)
       .map((r) => ({
         ...r,
         distance: `${(((r.price - currentPrice) / currentPrice) * 100).toFixed(1)}%`,
       }));
 
-    // Se não encontrou níveis suficientes, adiciona mocks
     while (supports.length < 3) {
       const fallbackPrice = currentPrice * (0.96 - supports.length * 0.03);
       supports.push({
@@ -245,7 +219,6 @@ export async function calculateKeyLevels(
     return { supports, resistances };
   } catch (error) {
     console.error("Failed to calculate key levels:", error);
-    // Fallback completo para mocks em caso de erro
     return {
       supports: [
         { price: currentPrice * 0.96, distance: "4.0%", timeframe: "Daily" },

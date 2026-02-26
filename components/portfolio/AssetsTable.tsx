@@ -39,7 +39,7 @@ function pct2Always(v: number | null, fallback = 0) {
 export default function AssetsTable(props: {
   assets: AssetRow[];
   title?: string;
-  onAssetClick?: (symbol: string) => void; // NOVO: callback opcional
+  onAssetClick?: (symbol: string) => void;
 }) {
   const rows = props.assets;
 

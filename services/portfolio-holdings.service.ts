@@ -50,7 +50,6 @@ export async function getOpenSpotHolding(
 export async function getOpenSpotHoldings(
   accountId: string,
 ): Promise<Holding[]> {
-  // Fetch all distinct asset names with open spot buy positions
   const rows = await prisma.journal_entry.findMany({
     where: {
       account_id: accountId,
@@ -63,7 +62,6 @@ export async function getOpenSpotHoldings(
 
   if (!rows.length) return [];
 
-  // Group by asset and calculate qty + avg entry price
   const map = new Map<string, { qty: number; investedUsd: number }>();
 
   for (const r of rows) {

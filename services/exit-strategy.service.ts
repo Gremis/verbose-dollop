@@ -5,8 +5,6 @@ import {
   getOpenSpotHoldings,
 } from "@/services/portfolio-holdings.service";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 export type ExitStrategyAssetSummary = {
   coinSymbol: string;
 
@@ -29,7 +27,7 @@ export type ExitStrategyAssetSummary = {
 export type ExitStrategySummary = {
   id: string;
   isAllCoins: boolean;
-  coinSymbols: string[]; // empty when isAllCoins = true (resolved dynamically)
+  coinSymbols: string[];
   strategyType: "percentage";
   sellPercent: number;
   gainPercent: number;
@@ -37,7 +35,7 @@ export type ExitStrategySummary = {
 
   assets: ExitStrategyAssetSummary[];
   totalAssets: number;
-  totalProfitUsd: number; // sum of usdValueToSell across ready assets
+  totalProfitUsd: number;
 };
 
 export type ExitStrategyStepRow = {
@@ -54,11 +52,8 @@ export type ExitStrategyStepRow = {
 
 export type ExitStrategyDetails = {
   summary: ExitStrategySummary;
-  // rows per coin, keyed by coinSymbol
   rowsByCoin: Record<string, ExitStrategyStepRow[]>;
 };
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function round(n: number, digits: number): number {
   const p = 10 ** digits;
@@ -129,8 +124,6 @@ async function buildAssetSummary(
   };
 }
 
-// ─── Public API ───────────────────────────────────────────────────────────────
-
 export async function buildExitStrategySummary(
   accountId: string,
   strategyId: string,
@@ -152,10 +145,8 @@ export async function buildExitStrategySummary(
   const sellPercent = Number(s.sell_percent);
   const gainPercent = Number(s.gain_percent);
 
-  // Resolve which coins this strategy applies to
   let coins: string[];
   if (s.is_all_coins) {
-    // Dynamically fetch all coins with open positions
     const holdings = await getOpenSpotHoldings(accountId);
     coins = holdings.map((h) => h.symbol.toUpperCase());
   } else {

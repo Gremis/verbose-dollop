@@ -22,7 +22,7 @@ export async function GET(
   request: Request,
   { params }: { params: Promise<{ symbol: string }> },
 ) {
-  let symbol = "[unknown]"; // Declara fora do try
+  let symbol = "[unknown]";
   try {
     const session = await getServerSession(authOptions);
     if (!session?.accountId) {
@@ -31,9 +31,8 @@ export async function GET(
 
     const accountId = session.accountId;
     const { symbol: symbolParam } = await params;
-    symbol = symbolParam.toUpperCase(); // Atribui aqui
+    symbol = symbolParam.toUpperCase();
 
-    // Buscar metadata do asset
     const assetMeta = await prisma.verified_asset.findUnique({
       where: { symbol },
       select: {
@@ -48,7 +47,6 @@ export async function GET(
       return NextResponse.json({ error: "Asset not found" }, { status: 404 });
     }
 
-    // Buscar todas as transações desse asset
     const rows = (await prisma.journal_entry.findMany({
       where: {
         account_id: accountId,
@@ -69,7 +67,6 @@ export async function GET(
       },
     })) as DbRow[];
 
-    // Calcular holdings e profit
     let qtyHeld = 0;
     let costBasisUsd = 0;
     let totalInvestedUsd = 0;
@@ -142,7 +139,6 @@ export async function GET(
       }
     }
 
-    // Buscar preço atual
     let currentPrice = 0;
     let change24hPct: number | null = null;
 
@@ -154,7 +150,6 @@ export async function GET(
       }
     }
 
-    // Se não conseguiu preço, usa avg buy price
     if (currentPrice === 0 && qtyHeld > 0 && costBasisUsd > 0) {
       currentPrice = costBasisUsd / qtyHeld;
     }
@@ -167,7 +162,6 @@ export async function GET(
 
     const avgBuyPrice = qtyHeld > 0 ? costBasisUsd / qtyHeld : 0;
 
-    // Calcular Key Levels reais
     const keyLevels = await calculateKeyLevels(
       assetMeta.coingecko_id,
       currentPrice,
@@ -201,7 +195,7 @@ export async function GET(
 
       keyLevels: keyLevels,
 
-      transactions: transactions.reverse(), // Mais recentes primeiro
+      transactions: transactions.reverse(),
     });
   } catch (e) {
     console.error(`[GET /api/portfolio/${symbol}] error:`, e);

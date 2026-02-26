@@ -2,14 +2,10 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
 type AssetItem = { symbol: string; name: string | null; exchange?: string };
 type CoinsApiResponse = { items?: AssetItem[] };
 
 export type CoinSelection = string[] | "all";
-
-// ─── Helpers (same as AssetAutocomplete) ─────────────────────────────────────
 
 const STABLE_SUFFIXES = ["USDT", "USDC", "BUSD", "TUSD", "DAI", "USD"] as const;
 
@@ -50,8 +46,6 @@ function parseCoinsApiResponse(x: unknown): CoinsApiResponse {
   return { items: rawItems.filter(isAssetItem) };
 }
 
-// ─── Component ────────────────────────────────────────────────────────────────
-
 export default function AssetMultiSelect({
   value,
   onChange,
@@ -70,9 +64,8 @@ export default function AssetMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isAll = value === "all";
-  const selected: string[] = isAll ? [] : value;
+  const selected = useMemo<string[]>(() => (value === "all" ? [] : value), [value]);
 
-  // Close on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -87,7 +80,6 @@ export default function AssetMultiSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Fetch suggestions with debounce
   useEffect(() => {
     const query = q.trim();
     if (!query) {
@@ -170,7 +162,6 @@ export default function AssetMultiSelect({
 
   return (
     <div ref={containerRef} className="relative">
-      {/* Input box with chips */}
       <div
         className="min-h-[42px] w-full rounded-xl border border-gray-200 bg-white px-2 py-1.5 flex flex-wrap gap-1.5 items-center cursor-text focus-within:ring-2 focus-within:ring-purple-400 focus-within:border-purple-400 transition-all"
         onClick={() => {
@@ -180,7 +171,6 @@ export default function AssetMultiSelect({
           }
         }}
       >
-        {/* All Coins chip */}
         {isAll && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 text-purple-700 text-sm px-2 py-0.5 font-medium">
             All Coins
@@ -198,7 +188,6 @@ export default function AssetMultiSelect({
           </span>
         )}
 
-        {/* Selected coin chips */}
         {!isAll &&
           selected.map((sym) => (
             <span
@@ -220,7 +209,6 @@ export default function AssetMultiSelect({
             </span>
           ))}
 
-        {/* Search input */}
         {!isAll && (
           <input
             ref={inputRef}
@@ -236,7 +224,6 @@ export default function AssetMultiSelect({
           />
         )}
 
-        {/* Dropdown arrow */}
         <button
           type="button"
           className="ml-auto text-gray-400 hover:text-gray-600 px-1"
@@ -262,11 +249,9 @@ export default function AssetMultiSelect({
         </button>
       </div>
 
-      {/* Dropdown */}
       {open && !isAll && (
         <div className="absolute z-20 mt-1 w-full rounded-xl border bg-white shadow-lg overflow-hidden">
           <div className="max-h-64 overflow-y-auto">
-            {/* All Coins option */}
             <button
               type="button"
               className="flex items-center gap-3 w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b"
@@ -282,17 +267,14 @@ export default function AssetMultiSelect({
               </div>
             </button>
 
-            {/* Loading */}
             {loading && (
               <div className="px-3 py-2 text-sm text-gray-500">Loading…</div>
             )}
 
-            {/* No results */}
             {!loading && q.trim() && filteredItems.length === 0 && (
               <div className="px-3 py-2 text-sm text-gray-500">No results</div>
             )}
 
-            {/* Coin options */}
             {filteredItems.map((it) => {
               const isChecked = selected.includes(it.symbol);
               return (

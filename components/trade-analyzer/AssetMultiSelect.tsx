@@ -2,61 +2,25 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-type AssetItem = { symbol: string; name: string | null; exchange?: string };
-type CoinsApiResponse = { items?: AssetItem[] };
+// ─── Types ────────────────────────────────────────────────────────────────────
+
+type PortfolioSymbol = { symbol: string; name: string | null };
 
 export type CoinSelection = string[] | "all";
 
-const STABLE_SUFFIXES = ["USDT", "USDC", "BUSD", "TUSD", "DAI", "USD"] as const;
-
-function isPureAssetSymbol(symbolRaw: string) {
-  const s = (symbolRaw ?? "").trim().toUpperCase();
-  if (!s) return false;
-  if (s.includes("/") || s.includes("-") || s.includes("_") || s.includes(" "))
-    return false;
-  for (const suf of STABLE_SUFFIXES) {
-    if (s.length > suf.length && s.endsWith(suf)) return false;
-  }
-  return /^[A-Z0-9]{2,15}$/.test(s);
-}
-
-function toAssetSymbol(raw: string) {
-  return (raw ?? "").trim().toUpperCase();
-}
-
-function isObjectRecord(x: unknown): x is Record<string, unknown> {
-  return typeof x === "object" && x !== null;
-}
-
-function isAssetItem(x: unknown): x is AssetItem {
-  if (!isObjectRecord(x)) return false;
-  return (
-    typeof x.symbol === "string" &&
-    ("name" in x ? x.name === null || typeof x.name === "string" : true) &&
-    ("exchange" in x
-      ? x.exchange === undefined || typeof x.exchange === "string"
-      : true)
-  );
-}
-
-function parseCoinsApiResponse(x: unknown): CoinsApiResponse {
-  if (!isObjectRecord(x)) return {};
-  const rawItems = x.items;
-  if (!Array.isArray(rawItems)) return {};
-  return { items: rawItems.filter(isAssetItem) };
-}
+// ─── Component ────────────────────────────────────────────────────────────────
 
 export default function AssetMultiSelect({
   value,
   onChange,
-  placeholder = "Search coins…",
+  placeholder = "Search assets…",
 }: {
   value: CoinSelection;
   onChange: (v: CoinSelection) => void;
   placeholder?: string;
 }) {
   const [q, setQ] = useState("");
-  const [items, setItems] = useState<AssetItem[]>([]);
+  const [allSymbols, setAllSymbols] = useState<PortfolioSymbol[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -64,8 +28,12 @@ export default function AssetMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isAll = value === "all";
-  const selected = useMemo<string[]>(() => (value === "all" ? [] : value), [value]);
+  const selected = useMemo<string[]>(
+    () => (value === "all" ? [] : value),
+    [value],
+  );
 
+  // Close on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -80,48 +48,42 @@ export default function AssetMultiSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  // Load portfolio symbols once on mount
   useEffect(() => {
-    const query = q.trim();
-    if (!query) {
-      setItems([]);
-      return;
-    }
-
     let cancelled = false;
     setLoading(true);
 
-    const id = setTimeout(async () => {
-      try {
-        const res = await fetch(
-          `/api/assets/coins?q=${encodeURIComponent(query)}`,
-          {
-            cache: "no-store",
-          },
-        );
-        const parsed = parseCoinsApiResponse(
-          (await res.json().catch(() => null)) as unknown,
-        );
-        const list = (parsed.items ?? [])
-          .map((it) => ({ ...it, symbol: toAssetSymbol(it.symbol) }))
-          .filter((it) => isPureAssetSymbol(it.symbol));
-
-        if (!cancelled) setItems(list);
-      } catch {
-        if (!cancelled) setItems([]);
-      } finally {
+    void fetch("/api/portfolio/symbols", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((json: unknown) => {
+        if (cancelled) return;
+        if (
+          typeof json === "object" &&
+          json !== null &&
+          "items" in json &&
+          Array.isArray((json as { items: unknown }).items)
+        ) {
+          setAllSymbols((json as { items: PortfolioSymbol[] }).items);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setAllSymbols([]);
+      })
+      .finally(() => {
         if (!cancelled) setLoading(false);
-      }
-    }, 250);
+      });
 
     return () => {
       cancelled = true;
-      clearTimeout(id);
     };
-  }, [q]);
+  }, []);
 
-  const filteredItems = useMemo(
-    () => items.filter((it) => !selected.includes(it.symbol)),
-    [items, selected],
+  // Filter by search query and exclude already selected
+  const filteredSymbols = allSymbols.filter(
+    (it) =>
+      !selected.includes(it.symbol) &&
+      (q.trim() === "" ||
+        it.symbol.toLowerCase().includes(q.trim().toLowerCase())),
   );
 
   function toggleCoin(symbol: string) {
@@ -131,7 +93,6 @@ export default function AssetMultiSelect({
     } else {
       onChange([...selected, symbol]);
     }
-    setQ("");
     inputRef.current?.focus();
   }
 
@@ -141,11 +102,7 @@ export default function AssetMultiSelect({
   }
 
   function toggleAll() {
-    if (isAll) {
-      onChange([]);
-    } else {
-      onChange("all");
-    }
+    onChange(isAll ? [] : "all");
     setQ("");
     setOpen(false);
   }
@@ -171,9 +128,10 @@ export default function AssetMultiSelect({
           }
         }}
       >
+        {/* All Assets chip */}
         {isAll && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 text-purple-700 text-sm px-2 py-0.5 font-medium">
-            All Coins
+            All Assets
             <button
               type="button"
               onClick={(e) => {
@@ -181,13 +139,14 @@ export default function AssetMultiSelect({
                 toggleAll();
               }}
               className="hover:text-purple-900 leading-none"
-              aria-label="Remove All Coins"
+              aria-label="Remove All Assets"
             >
               ×
             </button>
           </span>
         )}
 
+        {/* Selected asset chips */}
         {!isAll &&
           selected.map((sym) => (
             <span
@@ -252,6 +211,7 @@ export default function AssetMultiSelect({
       {open && !isAll && (
         <div className="absolute z-20 mt-1 w-full rounded-xl border bg-white shadow-lg overflow-hidden">
           <div className="max-h-64 overflow-y-auto">
+            {/* All Assets option */}
             <button
               type="button"
               className="flex items-center gap-3 w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b"
@@ -260,9 +220,9 @@ export default function AssetMultiSelect({
             >
               <div className="w-4 h-4 rounded border-2 border-gray-300 flex-shrink-0" />
               <div>
-                <div className="font-medium text-sm">All Coins</div>
+                <div className="font-medium text-sm">All Assets</div>
                 <div className="text-xs text-gray-500">
-                  Apply strategy to all assets
+                  Apply strategy to all portfolio assets
                 </div>
               </div>
             </button>
@@ -271,11 +231,17 @@ export default function AssetMultiSelect({
               <div className="px-3 py-2 text-sm text-gray-500">Loading…</div>
             )}
 
-            {!loading && q.trim() && filteredItems.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-500">No results</div>
+            {/* No results */}
+            {!loading && filteredSymbols.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-500">
+                {allSymbols.length === 0
+                  ? "No assets in portfolio"
+                  : "No results"}
+              </div>
             )}
 
-            {filteredItems.map((it) => {
+            {/* Asset options */}
+            {filteredSymbols.map((it) => {
               const isChecked = selected.includes(it.symbol);
               return (
                 <button
@@ -310,10 +276,9 @@ export default function AssetMultiSelect({
                   </div>
                   <div>
                     <div className="font-medium text-sm">{it.symbol}</div>
-                    <div className="text-xs text-gray-500">
-                      {it.name ?? "—"}
-                      {it.exchange ? ` · ${it.exchange}` : ""}
-                    </div>
+                    {it.name && (
+                      <div className="text-xs text-gray-500">{it.name}</div>
+                    )}
                   </div>
                 </button>
               );

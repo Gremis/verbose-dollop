@@ -28,11 +28,6 @@ const BaseSchema = z
     strategy_rule_match: z.number().int().min(0).max(999).optional().default(0),
     notes_entry: z.string().optional().nullable(),
     notes_review: z.string().optional().nullable(),
-    futures: z
-      .object({
-        margin_used: z.number().positive(),
-      })
-      .optional(),
     source: z.enum(["portfolio"]).optional(),
     tags: z.array(z.string().min(1)).optional().default([]),
   })
@@ -45,12 +40,6 @@ const BaseSchema = z
       });
     }
     const t = Number(v.trade_type);
-    if (t === 2 && !v.futures)
-      ctx.addIssue({
-        code: z.ZodIssueCode.custom,
-        path: ["futures"],
-        message: "Futures data required",
-      });
     if (t === 1 && !["buy", "sell"].includes(v.side))
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
@@ -118,7 +107,7 @@ export async function GET(req: Request) {
       entry: Number(r.entry_price),
       exit: r.exit_price != null ? Number(r.exit_price) : null,
       amountSpent: Number(r.amount_spent),
-      leverage: null, // ❌ REMOVIDO - não existe mais
+      leverage: null,
       tradeType: r.trade_type as 1 | 2,
       buyFee: Number(r.buy_fee),
       sellFee: Number(r.sell_fee),
@@ -145,7 +134,6 @@ export async function GET(req: Request) {
       stop_loss_price:
         r.stop_loss_price != null ? Number(r.stop_loss_price) : null,
       tags: r.tags.map((jt) => jt.tag.name),
-      // ❌ REMOVIDOS: timeframe_code, leverage, liquidation_price
     };
   });
 
@@ -195,7 +183,6 @@ export async function POST(req: Request) {
       amountSpent: data.amount_spent,
       entryPrice: data.entry_price,
       tradeType,
-      leverage: undefined, // ❌ REMOVIDO - não existe mais
     });
 
     const je = await tx.journal_entry.create({
@@ -212,7 +199,6 @@ export async function POST(req: Request) {
         strategy_id: strategyId,
         notes_entry: data.notes_entry ?? null,
         notes_review: data.notes_review ?? null,
-        // ❌ REMOVIDO: timeframe_code
         buy_fee: Number(data.buy_fee ?? 0),
         sell_fee: Number(sellFeeToPersist),
         trading_fee: Number(data.trading_fee ?? 0),
@@ -227,13 +213,10 @@ export async function POST(req: Request) {
     if (tradeType === 1) {
       await tx.spot_trade.create({ data: { journal_entry_id: je.id } });
     } else {
-      const f = data.futures!;
-      const marginUsed = f.margin_used;
       await tx.futures_trade.create({
         data: {
           journal_entry_id: je.id,
-          // ❌ REMOVIDOS: leverage, liquidation_price
-          margin_used: marginUsed,
+          margin_used: data.amount_spent,
         },
       });
     }

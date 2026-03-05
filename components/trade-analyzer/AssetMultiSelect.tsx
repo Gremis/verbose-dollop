@@ -2,25 +2,63 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 
-// ─── Types ────────────────────────────────────────────────────────────────────
-
-type PortfolioSymbol = { symbol: string; name: string | null };
+type AssetItem = { symbol: string; name: string | null; exchange?: string };
+type CoinsApiResponse = { items?: AssetItem[] };
 
 export type CoinSelection = string[] | "all";
 
-// ─── Component ────────────────────────────────────────────────────────────────
+const STABLE_SUFFIXES = ["USDT", "USDC", "BUSD", "TUSD", "DAI", "USD"] as const;
+
+function isPureAssetSymbol(symbolRaw: string) {
+  const s = (symbolRaw ?? "").trim().toUpperCase();
+  if (!s) return false;
+  if (s.includes("/") || s.includes("-") || s.includes("_") || s.includes(" "))
+    return false;
+  for (const suf of STABLE_SUFFIXES) {
+    if (s.length > suf.length && s.endsWith(suf)) return false;
+  }
+  return /^[A-Z0-9]{2,15}$/.test(s);
+}
+
+function toAssetSymbol(raw: string) {
+  return (raw ?? "").trim().toUpperCase();
+}
+
+function isObjectRecord(x: unknown): x is Record<string, unknown> {
+  return typeof x === "object" && x !== null;
+}
+
+function isAssetItem(x: unknown): x is AssetItem {
+  if (!isObjectRecord(x)) return false;
+  return (
+    typeof x.symbol === "string" &&
+    ("name" in x ? x.name === null || typeof x.name === "string" : true) &&
+    ("exchange" in x
+      ? x.exchange === undefined || typeof x.exchange === "string"
+      : true)
+  );
+}
+
+function parseCoinsApiResponse(x: unknown): CoinsApiResponse {
+  if (!isObjectRecord(x)) return {};
+  const rawItems = x.items;
+  if (!Array.isArray(rawItems)) return {};
+  return { items: rawItems.filter(isAssetItem) };
+}
 
 export default function AssetMultiSelect({
   value,
   onChange,
   placeholder = "Search assets…",
+  searchEndpoint = "/api/assets/coins",
 }: {
   value: CoinSelection;
   onChange: (v: CoinSelection) => void;
   placeholder?: string;
+  searchEndpoint?: string;
 }) {
   const [q, setQ] = useState("");
-  const [allSymbols, setAllSymbols] = useState<PortfolioSymbol[]>([]);
+  const [items, setItems] = useState<AssetItem[]>([]);
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
@@ -28,12 +66,8 @@ export default function AssetMultiSelect({
   const containerRef = useRef<HTMLDivElement>(null);
 
   const isAll = value === "all";
-  const selected = useMemo<string[]>(
-    () => (value === "all" ? [] : value),
-    [value],
-  );
+  const selected = useMemo<string[]>(() => (value === "all" ? [] : value), [value]);
 
-  // Close on outside click
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
       if (
@@ -48,42 +82,48 @@ export default function AssetMultiSelect({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
-  // Load portfolio symbols once on mount
   useEffect(() => {
+    const query = q.trim();
+    if (!query) {
+      setItems([]);
+      return;
+    }
+
     let cancelled = false;
     setLoading(true);
 
-    void fetch("/api/portfolio/symbols", { cache: "no-store" })
-      .then((res) => res.json())
-      .then((json: unknown) => {
-        if (cancelled) return;
-        if (
-          typeof json === "object" &&
-          json !== null &&
-          "items" in json &&
-          Array.isArray((json as { items: unknown }).items)
-        ) {
-          setAllSymbols((json as { items: PortfolioSymbol[] }).items);
-        }
-      })
-      .catch(() => {
-        if (!cancelled) setAllSymbols([]);
-      })
-      .finally(() => {
+    const id = setTimeout(async () => {
+      try {
+        const res = await fetch(
+          `${searchEndpoint}${searchEndpoint.includes("?") ? "&" : "?"}q=${encodeURIComponent(query)}`,
+          {
+            cache: "no-store",
+          },
+        );
+        const parsed = parseCoinsApiResponse(
+          (await res.json().catch(() => null)) as unknown,
+        );
+        const list = (parsed.items ?? [])
+          .map((it) => ({ ...it, symbol: toAssetSymbol(it.symbol) }))
+          .filter((it) => isPureAssetSymbol(it.symbol));
+
+        if (!cancelled) setItems(list);
+      } catch {
+        if (!cancelled) setItems([]);
+      } finally {
         if (!cancelled) setLoading(false);
-      });
+      }
+    }, 250);
 
     return () => {
       cancelled = true;
+      clearTimeout(id);
     };
-  }, []);
+  }, [q, searchEndpoint]);
 
-  // Filter by search query and exclude already selected
-  const filteredSymbols = allSymbols.filter(
-    (it) =>
-      !selected.includes(it.symbol) &&
-      (q.trim() === "" ||
-        it.symbol.toLowerCase().includes(q.trim().toLowerCase())),
+  const filteredItems = useMemo(
+    () => items.filter((it) => !selected.includes(it.symbol)),
+    [items, selected],
   );
 
   function toggleCoin(symbol: string) {
@@ -93,6 +133,7 @@ export default function AssetMultiSelect({
     } else {
       onChange([...selected, symbol]);
     }
+    setQ("");
     inputRef.current?.focus();
   }
 
@@ -102,7 +143,11 @@ export default function AssetMultiSelect({
   }
 
   function toggleAll() {
-    onChange(isAll ? [] : "all");
+    if (isAll) {
+      onChange([]);
+    } else {
+      onChange("all");
+    }
     setQ("");
     setOpen(false);
   }
@@ -128,7 +173,6 @@ export default function AssetMultiSelect({
           }
         }}
       >
-        {/* All Assets chip */}
         {isAll && (
           <span className="inline-flex items-center gap-1 rounded-lg bg-purple-100 text-purple-700 text-sm px-2 py-0.5 font-medium">
             All Assets
@@ -146,7 +190,6 @@ export default function AssetMultiSelect({
           </span>
         )}
 
-        {/* Selected asset chips */}
         {!isAll &&
           selected.map((sym) => (
             <span
@@ -211,7 +254,6 @@ export default function AssetMultiSelect({
       {open && !isAll && (
         <div className="absolute z-20 mt-1 w-full rounded-xl border bg-white shadow-lg overflow-hidden">
           <div className="max-h-64 overflow-y-auto">
-            {/* All Assets option */}
             <button
               type="button"
               className="flex items-center gap-3 w-full text-left px-3 py-2.5 hover:bg-gray-50 border-b"
@@ -222,7 +264,7 @@ export default function AssetMultiSelect({
               <div>
                 <div className="font-medium text-sm">All Assets</div>
                 <div className="text-xs text-gray-500">
-                  Apply strategy to all portfolio assets
+                  Apply strategy to all assets
                 </div>
               </div>
             </button>
@@ -231,17 +273,11 @@ export default function AssetMultiSelect({
               <div className="px-3 py-2 text-sm text-gray-500">Loading…</div>
             )}
 
-            {/* No results */}
-            {!loading && filteredSymbols.length === 0 && (
-              <div className="px-3 py-2 text-sm text-gray-500">
-                {allSymbols.length === 0
-                  ? "No assets in portfolio"
-                  : "No results"}
-              </div>
+            {!loading && q.trim() && filteredItems.length === 0 && (
+              <div className="px-3 py-2 text-sm text-gray-500">No results</div>
             )}
 
-            {/* Asset options */}
-            {filteredSymbols.map((it) => {
+            {filteredItems.map((it) => {
               const isChecked = selected.includes(it.symbol);
               return (
                 <button
@@ -276,9 +312,10 @@ export default function AssetMultiSelect({
                   </div>
                   <div>
                     <div className="font-medium text-sm">{it.symbol}</div>
-                    {it.name && (
-                      <div className="text-xs text-gray-500">{it.name}</div>
-                    )}
+                    <div className="text-xs text-gray-500">
+                      {it.name ?? "—"}
+                      {it.exchange ? ` · ${it.exchange}` : ""}
+                    </div>
                   </div>
                 </button>
               );

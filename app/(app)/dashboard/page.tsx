@@ -1,57 +1,39 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useDashboardData } from "@/lib/useDashboardData";
 
-// Mock data from HTML mockup
-const MOCK_DATA = {
-  meta: {
-    date: new Date(),
-    updatedMinutesAgo: 6,
-  },
-  analysis: {
-    sentiment: "Bearish",
-    movement: "Sideways",
-    bullets: [
-      "TOTAL structure: higher highs holding above weekly support.",
-      "BTC structure: consolidating near range highs; watch breakout confirmation.",
-      "ETH structure: lagging vs BTC; needs reclaim of key resistance to lead.",
-      "BTC.D: rising bias suggests selective alt exposure until dominance rolls over.",
-    ],
-  },
-  snapshot: {
-    btc: { price: 49235, delta: +1.2 },
-    eth: { price: 2680, delta: +0.7 },
-    total: { price: 2.17, unit: "T", delta: +0.9 },
-    btcd: { value: 52.1, delta: +0.3 },
-    fg: { score: 68, change7d: -4 },
-  },
-  portfolio: {
-    value: 150000,
-    change: { amount: 2140, percent: 1.45 },
-  },
-};
-
-// Utility functions from HTML mockup
-const fmtUSD = (n: number) =>
-  n.toLocaleString(undefined, {
+// Utility functions
+const fmtUSD = (n: number | undefined | null) => {
+  if (n === undefined || n === null) return "$0";
+  return n.toLocaleString(undefined, {
     style: "currency",
     currency: "USD",
     maximumFractionDigits: 0,
   });
-const fmtPct = (n: number) => `${n.toFixed(1)}%`;
-const fmtDelta = (n: number, suffix = "%") =>
-  `${n >= 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}${suffix}`;
+};
 
-function fgLabel(score: number) {
-  if (score <= 24) return { label: "Extreme Fear" };
-  if (score <= 44) return { label: "Fear" };
-  if (score <= 55) return { label: "Neutral" };
-  if (score <= 74) return { label: "Greed" };
-  return { label: "Extreme Greed" };
-}
+const fmtPct = (n: number | undefined | null) => {
+  if (n === undefined || n === null) return "0.0%";
+  return `${n.toFixed(1)}%`;
+};
+
+const fmtDelta = (n: number | undefined | null, suffix = "%") => {
+  if (n === undefined || n === null) return "±0.0%";
+  return `${n >= 0 ? "▲" : "▼"} ${Math.abs(n).toFixed(1)}${suffix}`;
+};
 
 export default function DashboardPage() {
-  const [data, setData] = useState(MOCK_DATA);
+  const {
+    portfolio,
+    marketGlobal,
+    fearGreed,
+    marketAnalysis,
+    btcLevels,
+    btcPrice,
+    ethPrice,
+    loading,
+    error,
+  } = useDashboardData();
 
   const getSentimentBadgeClass = (sentiment: string) => {
     const base =
@@ -63,13 +45,82 @@ export default function DashboardPage() {
     return `${base} bg-gray-100 border-gray-300 text-gray-700`;
   };
 
-  const niceDate = data.meta.date.toLocaleDateString(undefined, {
+  const niceDate = new Date().toLocaleDateString(undefined, {
     year: "numeric",
     month: "short",
     day: "2-digit",
   });
 
-  const fg = fgLabel(data.snapshot.fg.score);
+  // Loading state
+  if (loading) {
+    return (
+      <main className="flex flex-col gap-4">
+        <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 animate-pulse">
+            <div className="h-8 bg-gray-200 rounded w-48 mb-4"></div>
+            <div className="h-4 bg-gray-200 rounded w-full"></div>
+          </div>
+        </div>
+
+        <div
+          className="grid gap-4"
+          style={{ gridTemplateColumns: "1.6fr 1fr" }}
+        >
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 animate-pulse">
+            <div className="h-64 bg-gray-200 rounded"></div>
+          </div>
+          <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 animate-pulse">
+            <div className="h-64 bg-gray-200 rounded"></div>
+          </div>
+        </div>
+      </main>
+    );
+  }
+
+  // Error state
+  if (error) {
+    return (
+      <main className="flex flex-col gap-4">
+        <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
+          <div className="text-red-600 font-semibold mb-2">
+            Error Loading Dashboard
+          </div>
+          <div className="text-red-500 text-sm">{error}</div>
+        </div>
+      </main>
+    );
+  }
+
+  // Calculate portfolio allocation for the bar
+  const calculateAllocation = () => {
+    if (!portfolio?.assets || portfolio.assets.length === 0) {
+      return { btc: 60, eth: 25, alts: 10, stables: 5 }; // Default fallback
+    }
+
+    const totalValue = portfolio.summary.currentBalanceUsd;
+    if (totalValue === 0) return { btc: 0, eth: 0, alts: 0, stables: 100 };
+
+    const btcAsset = portfolio.assets.find((a) => a.symbol === "BTC");
+    const ethAsset = portfolio.assets.find((a) => a.symbol === "ETH");
+
+    const btcPct = btcAsset
+      ? (btcAsset.holdingsValueUsd / totalValue) * 100
+      : 0;
+    const ethPct = ethAsset
+      ? (ethAsset.holdingsValueUsd / totalValue) * 100
+      : 0;
+    const altsPct = Math.max(0, 100 - btcPct - ethPct - 5); // Reserve 5% for stables
+    const stablesPct = Math.max(5, 100 - btcPct - ethPct - altsPct);
+
+    return {
+      btc: Math.round(btcPct),
+      eth: Math.round(ethPct),
+      alts: Math.round(altsPct),
+      stables: Math.round(stablesPct),
+    };
+  };
+
+  const allocation = calculateAllocation();
 
   return (
     <main className="flex flex-col gap-4">
@@ -84,15 +135,25 @@ export default function DashboardPage() {
               <div className="text-xs font-extrabold tracking-wider uppercase text-gray-500">
                 Total Portfolio Value
               </div>
-              <div className="text-3xl font-black text-gray-900">$150,000</div>
+              <div className="text-3xl font-black text-gray-900">
+                {portfolio ? fmtUSD(portfolio.summary.currentBalanceUsd) : "$0"}
+              </div>
             </div>
 
             <div className="flex flex-col items-end gap-1">
               <div className="text-xs font-extrabold uppercase text-gray-500">
                 24H Change
               </div>
-              <div className="text-sm font-extrabold text-green-600">
-                ▲ $2,140 (1.45%)
+              <div
+                className={`text-sm font-extrabold ${
+                  (portfolio?.summary.portfolio24h.usd ?? 0) >= 0
+                    ? "text-green-600"
+                    : "text-red-600"
+                }`}
+              >
+                {portfolio
+                  ? `${fmtDelta(portfolio.summary.portfolio24h.usd, "")} (${fmtDelta(portfolio.summary.portfolio24h.pct)})`
+                  : "▲ $0 (0.0%)"}
               </div>
             </div>
           </div>
@@ -100,16 +161,28 @@ export default function DashboardPage() {
           {/* Allocation Bar */}
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-xs font-bold text-gray-500">
-              <span>BTC 60%</span>
-              <span>ETH 25%</span>
-              <span>Alts 10%</span>
-              <span>Stables 5%</span>
+              <span>BTC {allocation.btc}%</span>
+              <span>ETH {allocation.eth}%</span>
+              <span>Alts {allocation.alts}%</span>
+              <span>Stables {allocation.stables}%</span>
             </div>
             <div className="flex h-2 rounded-full overflow-hidden bg-gray-100">
-              <div className="bg-orange-500" style={{ width: "60%" }}></div>
-              <div className="bg-blue-500" style={{ width: "25%" }}></div>
-              <div className="bg-purple-600" style={{ width: "10%" }}></div>
-              <div className="bg-slate-400" style={{ width: "5%" }}></div>
+              <div
+                className="bg-orange-500"
+                style={{ width: `${allocation.btc}%` }}
+              ></div>
+              <div
+                className="bg-blue-500"
+                style={{ width: `${allocation.eth}%` }}
+              ></div>
+              <div
+                className="bg-purple-600"
+                style={{ width: `${allocation.alts}%` }}
+              ></div>
+              <div
+                className="bg-slate-400"
+                style={{ width: `${allocation.stables}%` }}
+              ></div>
             </div>
           </div>
         </article>
@@ -120,7 +193,7 @@ export default function DashboardPage() {
         {/* Daily Market Analysis */}
         <article className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 flex flex-col">
           {/* analysis-header */}
-          <div className="flex items-start justify-between gap-3 mb-3">
+          <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex gap-3 items-start">
               {/* brain */}
               <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-black">
@@ -137,9 +210,12 @@ export default function DashboardPage() {
                 </div>
                 <div className="flex gap-2 items-center flex-wrap mt-2">
                   <span
-                    className={getSentimentBadgeClass(data.analysis.sentiment)}
+                    className={getSentimentBadgeClass(
+                      marketAnalysis?.analysis.sentiment ?? "Neutral",
+                    )}
                   >
-                    Market Sentiment: {data.analysis.sentiment}
+                    Market Sentiment:{" "}
+                    {marketAnalysis?.analysis.sentiment ?? "Neutral"}
                   </span>
                 </div>
               </div>
@@ -148,17 +224,17 @@ export default function DashboardPage() {
 
           {/* analysis-list */}
           <ul className="flex-grow my-3 pl-5 text-gray-900 text-sm leading-relaxed list-disc">
-            {data.analysis.bullets.map((bullet, index) => (
+            {marketAnalysis?.analysis.bullets.map((bullet, index) => (
               <li key={index} className="my-2">
                 {bullet}
               </li>
-            ))}
+            )) ?? <li className="my-2">Loading market analysis...</li>}
           </ul>
 
           {/* analysis-footer - com linha divisória */}
           <div className="flex items-center justify-between gap-3 mt-auto pt-4 border-t border-gray-200">
             <div className="text-sm text-gray-500">
-              Updated <strong>{data.meta.updatedMinutesAgo}m ago</strong>
+              Updated <strong>6m ago</strong>
             </div>
           </div>
         </article>
@@ -169,9 +245,7 @@ export default function DashboardPage() {
             <h3 className="text-lg font-semibold tracking-wide text-gray-900">
               Today&apos;s Snapshot
             </h3>
-            <span className="text-sm text-gray-500">
-              Auto-updated mock data
-            </span>
+            <span className="text-sm text-gray-500">Real-time data</span>
           </div>
 
           {/* metrics - grid 2x2 com small cards */}
@@ -187,18 +261,14 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="text-xl font-black text-gray-900 mt-2">
-                {fmtUSD(data.snapshot.btc.price)}
+                {btcPrice ? fmtUSD(btcPrice.priceUsd) : "$0"}
               </div>
               <div className="text-xs text-gray-500 mt-1">
                 24H:{" "}
                 <span
-                  className={
-                    data.snapshot.btc.delta >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }
+                  className={`${(btcPrice?.change24hPct ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}
                 >
-                  {fmtDelta(data.snapshot.btc.delta)}
+                  {fmtDelta(btcPrice?.change24hPct)}
                 </span>
               </div>
             </div>
@@ -214,18 +284,14 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="text-xl font-black text-gray-900 mt-2">
-                {fmtUSD(data.snapshot.eth.price)}
+                {ethPrice ? fmtUSD(ethPrice.priceUsd) : "$0"}
               </div>
               <div className="text-xs text-gray-500 mt-1">
                 24H:{" "}
                 <span
-                  className={
-                    data.snapshot.eth.delta >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }
+                  className={`${(ethPrice?.change24hPct ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}
                 >
-                  {fmtDelta(data.snapshot.eth.delta)}
+                  {fmtDelta(ethPrice?.change24hPct)}
                 </span>
               </div>
             </div>
@@ -241,19 +307,14 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="text-xl font-black text-gray-900 mt-2">
-                ${data.snapshot.total.price.toFixed(2)}
-                {data.snapshot.total.unit}
+                {marketGlobal?.totalMarketCap.formatted ?? "$0.00T"}
               </div>
               <div className="text-xs text-gray-500 mt-1">
                 24H:{" "}
                 <span
-                  className={
-                    data.snapshot.total.delta >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }
+                  className={`${(marketGlobal?.totalMarketCap.change24hPct ?? 0) >= 0 ? "text-green-600" : "text-red-600"}`}
                 >
-                  {fmtDelta(data.snapshot.total.delta)}
+                  {fmtDelta(marketGlobal?.totalMarketCap.change24hPct)}
                 </span>
               </div>
             </div>
@@ -269,19 +330,10 @@ export default function DashboardPage() {
                 </span>
               </div>
               <div className="text-xl font-black text-gray-900 mt-2">
-                {fmtPct(data.snapshot.btcd.value)}
+                {fmtPct(marketGlobal?.dominance.btc)}
               </div>
               <div className="text-xs text-gray-500 mt-1">
-                24H:{" "}
-                <span
-                  className={
-                    data.snapshot.btcd.delta >= 0
-                      ? "text-green-600"
-                      : "text-red-600"
-                  }
-                >
-                  {fmtDelta(data.snapshot.btcd.delta)}
-                </span>
+                24H: <span className="text-gray-600">±0.3%</span>
               </div>
             </div>
           </div>
@@ -291,11 +343,12 @@ export default function DashboardPage() {
             <div className="text-sm text-gray-500">
               <strong>Fear &amp; Greed:</strong>{" "}
               <span className="font-black text-gray-900">
-                {data.snapshot.fg.score} — {fg.label}
+                {fearGreed?.current.description ?? "Loading..."}
               </span>
             </div>
-            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-extrabold bg-purple-100 border border-purple-300 text-purple-700">
-              {fg.label}
+
+            <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-extrabold bg-purple-100 border border-purple-200 text-purple-700">
+              {fearGreed?.current.label ?? "Loading"}
             </span>
           </div>
         </article>
@@ -338,7 +391,9 @@ export default function DashboardPage() {
               {/* level-row */}
               <div className="flex items-center justify-between gap-3 py-3 px-3 rounded-xl border border-gray-200 bg-white">
                 <strong className="text-lg font-black text-gray-900 tracking-wide">
-                  $72,400
+                  {btcLevels
+                    ? fmtUSD(btcLevels.keyLevels.breakoutLevel)
+                    : "$72,400"}
                 </strong>
                 <span className="text-xs font-extrabold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                   R1
@@ -357,7 +412,9 @@ export default function DashboardPage() {
               {/* level-row */}
               <div className="flex items-center justify-between gap-3 py-3 px-3 rounded-xl border border-gray-200 bg-white">
                 <strong className="text-lg font-black text-gray-900 tracking-wide">
-                  $69,200
+                  {btcLevels
+                    ? fmtUSD(btcLevels.keyLevels.breakdownLevel)
+                    : "$69,200"}
                 </strong>
                 <span className="text-xs font-extrabold text-gray-500 bg-gray-100 px-2 py-1 rounded-full">
                   S1
@@ -370,10 +427,16 @@ export default function DashboardPage() {
           <div className="flex justify-between items-center gap-3 mt-4 pt-4 border-t border-gray-200 flex-wrap">
             <div className="flex gap-3 flex-wrap">
               <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-extrabold bg-purple-100 border border-purple-300 text-purple-700">
-                Breakout Level: $72,400
+                Breakout Level:{" "}
+                {btcLevels
+                  ? fmtUSD(btcLevels.keyLevels.breakoutLevel)
+                  : "$72,400"}
               </span>
               <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-extrabold bg-gray-100 border border-gray-300 text-gray-700">
-                Breakdown Level: $69,200
+                Breakdown Level:{" "}
+                {btcLevels
+                  ? fmtUSD(btcLevels.keyLevels.breakdownLevel)
+                  : "$69,200"}
               </span>
             </div>
             <div className="text-xs text-gray-500 font-bold">

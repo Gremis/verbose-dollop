@@ -7,11 +7,57 @@ export const dynamic = "force-dynamic";
 type MarketSentiment = "Bullish" | "Bearish" | "Neutral";
 type MarketMovement = "Trending Up" | "Trending Down" | "Sideways";
 
+type CoinGeckoGlobalResponse = {
+  data?: {
+    market_cap_change_percentage_24h_usd?: number;
+    market_cap_percentage?: {
+      btc?: number;
+    };
+  };
+};
+
+type FearGreedResponse = {
+  data?: Array<{
+    value?: string;
+    value_classification?: string;
+  }>;
+};
+
+function getFearGreedLabel(score: number): string {
+  if (score <= 24) return "Extreme Fear";
+  if (score <= 44) return "Fear";
+  if (score <= 55) return "Neutral";
+  if (score <= 74) return "Greed";
+  return "Extreme Greed";
+}
+
+async function parseJsonIfValid<T>(response: Response): Promise<T | null> {
+  const contentType = response.headers.get("content-type") ?? "";
+  if (!contentType.toLowerCase().includes("application/json")) {
+    return null;
+  }
+
+  try {
+    return (await response.json()) as T;
+  } catch {
+    return null;
+  }
+}
+
 async function getMarketData() {
-  // Get data from our existing APIs
   const [globalRes, fearGreedRes] = await Promise.allSettled([
-    fetch(`${process.env.NEXTAUTH_URL}/api/market/global`),
-    fetch(`${process.env.NEXTAUTH_URL}/api/market/fear-greed`),
+    fetch("https://api.coingecko.com/api/v3/global", {
+      headers: {
+        Accept: "application/json",
+      },
+      next: { revalidate: 300 },
+    }),
+    fetch("https://api.alternative.me/fng/?limit=1", {
+      headers: {
+        Accept: "application/json",
+      },
+      next: { revalidate: 1800 },
+    }),
   ]);
 
   let marketCap = null;
@@ -19,14 +65,32 @@ async function getMarketData() {
   let fearGreed = null;
 
   if (globalRes.status === "fulfilled" && globalRes.value.ok) {
-    const global = await globalRes.value.json();
-    marketCap = global.totalMarketCap;
-    btcDominance = global.dominance.btc;
+    const global = await parseJsonIfValid<CoinGeckoGlobalResponse>(
+      globalRes.value,
+    );
+    const change24h = global?.data?.market_cap_change_percentage_24h_usd;
+    const btc = global?.data?.market_cap_percentage?.btc;
+
+    if (typeof change24h === "number") {
+      marketCap = { change24hPct: change24h };
+    }
+    if (typeof btc === "number") {
+      btcDominance = btc;
+    }
   }
 
   if (fearGreedRes.status === "fulfilled" && fearGreedRes.value.ok) {
-    const fg = await fearGreedRes.value.json();
-    fearGreed = fg.current;
+    const fg = await parseJsonIfValid<FearGreedResponse>(fearGreedRes.value);
+    const latest = fg?.data?.[0];
+    const score = Number.parseInt(latest?.value ?? "", 10);
+
+    if (Number.isFinite(score)) {
+      fearGreed = {
+        score,
+        label:
+          latest?.value_classification?.trim() || getFearGreedLabel(score),
+      };
+    }
   }
 
   return { marketCap, btcDominance, fearGreed };
@@ -44,17 +108,14 @@ function analyzeSentiment(marketData: MarketData): MarketSentiment {
   let bullishSignals = 0;
   let bearishSignals = 0;
 
-  // Market Cap trend
   if (marketCap?.change24hPct !== undefined && marketCap.change24hPct > 2)
     bullishSignals++;
   else if (marketCap?.change24hPct !== undefined && marketCap.change24hPct < -2)
     bearishSignals++;
 
-  // BTC Dominance (high dominance can indicate alt season ending)
   if (btcDominance !== null && btcDominance > 55) bearishSignals++;
   else if (btcDominance !== null && btcDominance < 45) bullishSignals++;
 
-  // Fear & Greed
   if (fearGreed?.score !== undefined && fearGreed.score > 70) bullishSignals++;
   else if (fearGreed?.score !== undefined && fearGreed.score < 30)
     bearishSignals++;
@@ -80,7 +141,6 @@ function generateAnalysisBullets(marketData: MarketData): string[] {
   const { marketCap, btcDominance, fearGreed } = marketData;
   const bullets: string[] = [];
 
-  // Market Cap analysis
   if (marketCap?.change24hPct !== undefined) {
     const change = marketCap.change24hPct;
     if (change > 0) {
@@ -94,7 +154,6 @@ function generateAnalysisBullets(marketData: MarketData): string[] {
     }
   }
 
-  // BTC Dominance analysis
   if (btcDominance !== null) {
     if (btcDominance > 52) {
       bullets.push(
@@ -107,7 +166,6 @@ function generateAnalysisBullets(marketData: MarketData): string[] {
     }
   }
 
-  // Fear & Greed analysis
   if (fearGreed?.score !== undefined && fearGreed.label) {
     if (fearGreed.score > 70) {
       bullets.push(
@@ -124,7 +182,6 @@ function generateAnalysisBullets(marketData: MarketData): string[] {
     }
   }
 
-  // General market context
   const contextBullets = [
     "Monitor key support/resistance levels for confirmation of trend continuation.",
     "Volume analysis suggests institutional participation remains selective.",
@@ -132,12 +189,11 @@ function generateAnalysisBullets(marketData: MarketData): string[] {
     "Technical indicators showing mixed signals across major timeframes.",
   ];
 
-  // Add a relevant context bullet
   bullets.push(
     contextBullets[Math.floor(Math.random() * contextBullets.length)],
   );
 
-  return bullets.slice(0, 4); // Limit to 4 bullets max
+  return bullets.slice(0, 4);
 }
 
 export async function GET() {
@@ -147,10 +203,8 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get market data for analysis
     const marketData = await getMarketData();
 
-    // Generate analysis
     const sentiment = analyzeSentiment(marketData);
     const movement = analyzeMovement(marketData);
     const bullets = generateAnalysisBullets(marketData);
@@ -160,7 +214,7 @@ export async function GET() {
         sentiment,
         movement,
         bullets,
-        confidence: "medium", // Could be calculated based on data quality
+        confidence: "medium",
       },
       meta: {
         generatedAt: new Date().toISOString(),
@@ -171,7 +225,6 @@ export async function GET() {
   } catch (error) {
     console.error("[GET /api/market/analysis] error:", error);
 
-    // Fallback to structured mock data
     return NextResponse.json({
       analysis: {
         sentiment: "Bearish" as MarketSentiment,

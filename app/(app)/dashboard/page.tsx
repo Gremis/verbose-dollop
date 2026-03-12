@@ -2,7 +2,6 @@
 
 import { useDashboardData } from "@/lib/useDashboardData";
 
-// Utility functions
 const fmtUSD = (n: number | undefined | null) => {
   if (n === undefined || n === null) return "$0";
   return n.toLocaleString(undefined, {
@@ -51,7 +50,6 @@ export default function DashboardPage() {
     day: "2-digit",
   });
 
-  // Loading state
   if (loading) {
     return (
       <main className="flex flex-col gap-4">
@@ -62,10 +60,7 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        <div
-          className="grid gap-4"
-          style={{ gridTemplateColumns: "1.6fr 1fr" }}
-        >
+        <div className="grid gap-4 grid-cols-1 xl:grid-cols-[1.6fr_1fr]">
           <div className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 animate-pulse">
             <div className="h-64 bg-gray-200 rounded"></div>
           </div>
@@ -77,7 +72,6 @@ export default function DashboardPage() {
     );
   }
 
-  // Error state
   if (error) {
     return (
       <main className="flex flex-col gap-4">
@@ -91,10 +85,9 @@ export default function DashboardPage() {
     );
   }
 
-  // Calculate portfolio allocation for the bar
   const calculateAllocation = () => {
     if (!portfolio?.assets || portfolio.assets.length === 0) {
-      return { btc: 60, eth: 25, alts: 10, stables: 5 }; // Default fallback
+      return { btc: 60, eth: 25, alts: 10, stables: 5 };
     }
 
     const totalValue = portfolio.summary.currentBalanceUsd;
@@ -109,7 +102,7 @@ export default function DashboardPage() {
     const ethPct = ethAsset
       ? (ethAsset.holdingsValueUsd / totalValue) * 100
       : 0;
-    const altsPct = Math.max(0, 100 - btcPct - ethPct - 5); // Reserve 5% for stables
+    const altsPct = Math.max(0, 100 - btcPct - ethPct - 5);
     const stablesPct = Math.max(5, 100 - btcPct - ethPct - altsPct);
 
     return {
@@ -124,7 +117,6 @@ export default function DashboardPage() {
 
   return (
     <main className="flex flex-col gap-4">
-      {/* PORTFOLIO VALUE - Single column grid */}
       <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
         <article
           className="bg-white border border-gray-200 rounded-2xl shadow-lg flex flex-col gap-3"
@@ -158,7 +150,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Allocation Bar */}
           <div className="flex flex-col gap-2">
             <div className="flex justify-between text-xs font-bold text-gray-500">
               <span>BTC {allocation.btc}%</span>
@@ -188,14 +179,10 @@ export default function DashboardPage() {
         </article>
       </div>
 
-      {/* HERO GRID - 1.6fr 1fr columns */}
-      <div className="grid gap-4" style={{ gridTemplateColumns: "1.6fr 1fr" }}>
-        {/* Daily Market Analysis */}
+      <div className="grid gap-4 grid-cols-1 xl:grid-cols-[1.6fr_1fr]">
         <article className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 flex flex-col">
-          {/* analysis-header */}
           <div className="flex items-start justify-between gap-3 mb-4">
             <div className="flex gap-3 items-start">
-              {/* brain */}
               <div className="w-10 h-10 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-black">
                 AI
               </div>
@@ -222,7 +209,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* analysis-list */}
           <ul className="flex-grow my-3 pl-5 text-gray-900 text-sm leading-relaxed list-disc">
             {marketAnalysis?.analysis.bullets.map((bullet, index) => (
               <li key={index} className="my-2">
@@ -231,7 +217,6 @@ export default function DashboardPage() {
             )) ?? <li className="my-2">Loading market analysis...</li>}
           </ul>
 
-          {/* analysis-footer - com linha divisória */}
           <div className="flex items-center justify-between gap-3 mt-auto pt-4 border-t border-gray-200">
             <div className="text-sm text-gray-500">
               Updated <strong>6m ago</strong>
@@ -239,7 +224,6 @@ export default function DashboardPage() {
           </div>
         </article>
 
-        {/* Today's Snapshot */}
         <article className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4">
           <div className="flex items-center justify-between mb-4">
             <h3 className="text-lg font-semibold tracking-wide text-gray-900">
@@ -248,9 +232,7 @@ export default function DashboardPage() {
             <span className="text-sm text-gray-500">Real-time data</span>
           </div>
 
-          {/* metrics - grid 2x2 com small cards */}
-          <div className="grid grid-cols-2 gap-3 mb-4">
-            {/* BTC Price - metric card */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
             <div className="border border-gray-200 rounded-xl p-3 bg-gradient-to-b from-white to-purple-50">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 text-xs font-black">
@@ -273,7 +255,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* ETH Price - metric card */}
             <div className="border border-gray-200 rounded-xl p-3 bg-gradient-to-b from-white to-purple-50">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 text-xs font-black">
@@ -296,7 +277,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* TOTAL Market Cap - metric card */}
             <div className="border border-gray-200 rounded-xl p-3 bg-gradient-to-b from-white to-purple-50">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 text-xs font-black">
@@ -319,7 +299,6 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* BTC Dominance - metric card */}
             <div className="border border-gray-200 rounded-xl p-3 bg-gradient-to-b from-white to-purple-50">
               <div className="flex items-center gap-2 mb-2">
                 <div className="w-6 h-6 rounded-lg bg-purple-100 flex items-center justify-center text-purple-600 text-xs font-black">
@@ -338,7 +317,6 @@ export default function DashboardPage() {
             </div>
           </div>
 
-          {/* Fear & Greed Footer */}
           <div className="mt-3 pt-3 border-t border-gray-200 flex gap-3 items-center justify-between">
             <div className="text-sm text-gray-500">
               <strong>Fear &amp; Greed:</strong>{" "}
@@ -354,13 +332,10 @@ export default function DashboardPage() {
         </article>
       </div>
 
-      {/* BTC KEY LEVELS - Single column */}
       <div className="grid" style={{ gridTemplateColumns: "1fr" }}>
         <article className="bg-white border border-gray-200 rounded-2xl shadow-lg p-4 overflow-hidden bg-gradient-to-b from-white to-purple-50">
-          {/* levels-top */}
           <div className="flex items-start justify-between gap-4 mb-4">
             <div className="flex items-start gap-3">
-              {/* levels-icon - roxo padronizado */}
               <div className="w-11 h-11 rounded-xl bg-purple-100 flex items-center justify-center text-purple-600 font-black text-lg flex-shrink-0 shadow-inner">
                 ₿
               </div>
@@ -378,9 +353,7 @@ export default function DashboardPage() {
             </span>
           </div>
 
-          {/* levels-shell */}
-          <div className="grid grid-cols-2 gap-4 mb-4">
-            {/* Next Resistance - level-panel */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
             <section className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm bg-gradient-to-b from-white to-red-50">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-xs font-extrabold tracking-wider uppercase text-gray-500">
@@ -388,7 +361,6 @@ export default function DashboardPage() {
                 </div>
                 <span className="w-3 h-3 bg-red-600 rounded-full"></span>
               </div>
-              {/* level-row */}
               <div className="flex items-center justify-between gap-3 py-3 px-3 rounded-xl border border-gray-200 bg-white">
                 <strong className="text-lg font-black text-gray-900 tracking-wide">
                   {btcLevels
@@ -401,7 +373,6 @@ export default function DashboardPage() {
               </div>
             </section>
 
-            {/* Next Support - level-panel */}
             <section className="border border-gray-200 rounded-2xl p-4 bg-white shadow-sm bg-gradient-to-b from-white to-green-50">
               <div className="flex items-center justify-between mb-3">
                 <div className="text-xs font-extrabold tracking-wider uppercase text-gray-500">
@@ -409,7 +380,6 @@ export default function DashboardPage() {
                 </div>
                 <span className="w-3 h-3 bg-green-600 rounded-full"></span>
               </div>
-              {/* level-row */}
               <div className="flex items-center justify-between gap-3 py-3 px-3 rounded-xl border border-gray-200 bg-white">
                 <strong className="text-lg font-black text-gray-900 tracking-wide">
                   {btcLevels
@@ -423,7 +393,6 @@ export default function DashboardPage() {
             </section>
           </div>
 
-          {/* levels-footer */}
           <div className="flex justify-between items-center gap-3 mt-4 pt-4 border-t border-gray-200 flex-wrap">
             <div className="flex gap-3 flex-wrap">
               <span className="inline-flex items-center px-3 py-1.5 rounded-full text-xs font-extrabold bg-purple-100 border border-purple-300 text-purple-700">

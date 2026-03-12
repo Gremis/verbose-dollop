@@ -45,7 +45,7 @@ async function fetchFearGreedIndex(): Promise<{
     headers: {
       Accept: "application/json",
     },
-    next: { revalidate: 3600 }, // Cache for 1 hour
+    next: { revalidate: 3600 },
   });
 
   if (!res.ok) {
@@ -86,8 +86,7 @@ export async function GET() {
         description: `${fearGreed.score} — ${fearGreed.label}`,
       },
       history: {
-        // Could add 7-day history here if needed
-        change7d: null, // Would need additional API call
+        change7d: null,
       },
       meta: {
         source: "Alternative.me Fear & Greed Index",
@@ -98,7 +97,6 @@ export async function GET() {
   } catch (error) {
     console.error("[GET /api/market/fear-greed] error:", error);
 
-    // Fallback to mock data if API fails
     return NextResponse.json({
       current: {
         score: 68,
@@ -113,7 +111,7 @@ export async function GET() {
         source: "Alternative.me Fear & Greed Index",
         updatedAt: new Date().toISOString(),
         timestamp: new Date().toISOString(),
-        isEstimated: true, // Flag para indicar dados fallback
+        isEstimated: true,
       },
     });
   }

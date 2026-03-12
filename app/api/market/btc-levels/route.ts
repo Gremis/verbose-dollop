@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getServerSession } from "next-auth";
 import { authOptions } from "@/lib/auth";
+import { cgPriceUsdByIdSafe } from "@/lib/markets/coingecko";
 
 export const dynamic = "force-dynamic";
 
@@ -11,41 +12,28 @@ type PriceLevel = {
   strength: "weak" | "medium" | "strong";
 };
 
-// Get current BTC price from our portfolio API or fallback to external
 async function getCurrentBtcPrice(): Promise<number> {
   try {
-    // Try our portfolio API first
-    const portfolioRes = await fetch(
-      `${process.env.NEXTAUTH_URL}/api/portfolio/assets/price?id=bitcoin`,
-    );
-    if (portfolioRes.ok) {
-      const data = await portfolioRes.json();
-      return data.priceUsd;
-    }
+    const btcPrice = await cgPriceUsdByIdSafe("bitcoin");
 
-    // Fallback to direct CoinGecko call
-    const res = await fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd",
-    );
-    const data = await res.json();
-    return data.bitcoin.usd;
+    if (btcPrice.ok) {
+      return btcPrice.priceUsd;
+    }
   } catch (error) {
     console.error("Error fetching BTC price:", error);
-    return 67000; // Fallback price
   }
+
+  return 67000;
 }
 
-// Calculate technical levels based on current price
 function calculateTechnicalLevels(currentPrice: number): {
   resistances: PriceLevel[];
   supports: PriceLevel[];
   breakoutLevel: number;
   breakdownLevel: number;
 } {
-  // Round to nearest significant level
   const baseLevel = Math.round(currentPrice / 1000) * 1000;
 
-  // Calculate resistance levels (above current price)
   const resistances: PriceLevel[] = [
     {
       price: baseLevel + 3000,
@@ -67,7 +55,6 @@ function calculateTechnicalLevels(currentPrice: number): {
     },
   ].filter((r) => r.price > currentPrice);
 
-  // Calculate support levels (below current price)
   const supports: PriceLevel[] = [
     {
       price: baseLevel - 1000,
@@ -89,7 +76,6 @@ function calculateTechnicalLevels(currentPrice: number): {
     },
   ].filter((s) => s.price < currentPrice);
 
-  // Key breakout/breakdown levels
   const nearestResistance =
     resistances.find((r) => r.strength === "strong")?.price || baseLevel + 1000;
   const nearestSupport =
@@ -103,7 +89,6 @@ function calculateTechnicalLevels(currentPrice: number): {
   };
 }
 
-// Generate market structure insights
 function generateStructureInsights(
   currentPrice: number,
   levels: {
@@ -113,7 +98,6 @@ function generateStructureInsights(
 ): string[] {
   const insights: string[] = [];
 
-  // Price position analysis
   const midpoint = (levels.breakoutLevel + levels.breakdownLevel) / 2;
   if (currentPrice > midpoint) {
     insights.push(
@@ -125,7 +109,6 @@ function generateStructureInsights(
     );
   }
 
-  // Proximity to key levels
   const distanceToResistance =
     ((levels.breakoutLevel - currentPrice) / currentPrice) * 100;
   const distanceToSupport =
@@ -141,7 +124,6 @@ function generateStructureInsights(
     );
   }
 
-  // General structure context
   const contextInsights = [
     "Volume confirmation needed at key levels for validated moves.",
     "Multiple timeframe alignment suggests current structure is reliable.",
@@ -161,13 +143,10 @@ export async function GET() {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    // Get current BTC price
     const currentPrice = await getCurrentBtcPrice();
 
-    // Calculate technical levels
     const levels = calculateTechnicalLevels(currentPrice);
 
-    // Generate insights
     const insights = generateStructureInsights(currentPrice, levels);
 
     return NextResponse.json({
@@ -203,7 +182,6 @@ export async function GET() {
   } catch (error) {
     console.error("[GET /api/market/btc-levels] error:", error);
 
-    // Fallback to mock data
     return NextResponse.json({
       current: {
         price: 67000,

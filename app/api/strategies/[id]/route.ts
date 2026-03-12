@@ -15,7 +15,7 @@ const UpsertSchema = z.object({
       })
     )
     .default([]),
-  notes: z.string().max(10000).optional().nullable(),
+  description: z.string().max(10000).optional().nullable(),
 });
 
 export async function GET(
@@ -36,7 +36,12 @@ export async function GET(
 
   const st = await prisma.strategy.findFirst({
     where: { id, account_id: accountId },
-    include: { strategy_rules: { include: { rule: true } } },
+    include: {
+      strategy_rules: {
+        include: { rule: true },
+        orderBy: { date_created: "asc" },
+      },
+    },
   });
 
   if (!st) {
@@ -47,7 +52,7 @@ export async function GET(
     id: st.id,
     name: st.name,
     date_created: st.date_created,
-    notes: st.notes ?? null,
+    description: st.description ?? null,
     rules: st.strategy_rules.map((sr) => ({
       id: sr.rule.id,
       title: sr.rule.title,
@@ -85,12 +90,12 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const { name, rules, notes } = parsed.data;
+  const { name, rules, description } = parsed.data;
 
   await prisma.$transaction(async (tx) => {
     await tx.strategy.update({
       where: { id },
-      data: { name, notes: (notes ?? "") || null },
+      data: { name, description: (description ?? "") || null },
     });
 
     await tx.strategy_rule.deleteMany({ where: { strategy_id: id } });

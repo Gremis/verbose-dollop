@@ -59,7 +59,12 @@ export async function GET(req: Request) {
   const strategies = await prisma.strategy.findMany({
     where: { account_id: accountId },
     orderBy: { date_created: "desc" },
-    include: { strategy_rules: { include: { rule: true } } },
+    include: {
+      strategy_rules: {
+        include: { rule: true },
+        orderBy: { date_created: "asc" },
+      },
+    },
   })
 
   if (strategies.length === 0) {
@@ -167,11 +172,11 @@ export async function POST(req: Request) {
   const accountId = await getActiveAccountId(userId)
   if (!accountId) return NextResponse.json({ error: "Account not found" }, { status: 404 })
 
-  const { name, rules, notes } = parsed.data
+  const { name, rules, description } = parsed.data
 
   const created = await prisma.$transaction(async (tx) => {
     const st = await tx.strategy.create({
-      data: { name, account_id: accountId, notes: (notes ?? "") || null },
+      data: { name, account_id: accountId, description: (description ?? "") || null },
     })
     for (const r of rules) {
       const rule = await tx.rule.upsert({

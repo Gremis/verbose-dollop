@@ -1,6 +1,5 @@
 import { useState, useEffect } from "react";
 
-// Types para as responses das APIs
 type PortfolioData = {
   summary: {
     currentBalanceUsd: number;
@@ -108,7 +107,6 @@ export function useDashboardData(): DashboardData {
       try {
         setData((prev) => ({ ...prev, loading: true, error: null }));
 
-        // Fetch all APIs in parallel
         const [
           portfolioRes,
           marketGlobalRes,
@@ -125,13 +123,11 @@ export function useDashboardData(): DashboardData {
 
         if (cancelled) return;
 
-        // Process portfolio data
         let portfolioData: PortfolioData | null = null;
         if (portfolioRes.status === "fulfilled" && portfolioRes.value.ok) {
           portfolioData = await portfolioRes.value.json();
         }
 
-        // Process market global data
         let marketGlobalData: MarketGlobalData | null = null;
         if (
           marketGlobalRes.status === "fulfilled" &&
@@ -140,13 +136,11 @@ export function useDashboardData(): DashboardData {
           marketGlobalData = await marketGlobalRes.value.json();
         }
 
-        // Process fear & greed data
         let fearGreedData: FearGreedData | null = null;
         if (fearGreedRes.status === "fulfilled" && fearGreedRes.value.ok) {
           fearGreedData = await fearGreedRes.value.json();
         }
 
-        // Process market analysis data
         let marketAnalysisData: MarketAnalysisData | null = null;
         if (
           marketAnalysisRes.status === "fulfilled" &&
@@ -155,13 +149,11 @@ export function useDashboardData(): DashboardData {
           marketAnalysisData = await marketAnalysisRes.value.json();
         }
 
-        // Process BTC levels data
         let btcLevelsData: BtcLevelsData | null = null;
         if (btcLevelsRes.status === "fulfilled" && btcLevelsRes.value.ok) {
           btcLevelsData = await btcLevelsRes.value.json();
         }
 
-        // Get BTC/ETH prices from portfolio or fetch individually
         let btcPriceData: AssetPriceData | null = null;
         let ethPriceData: AssetPriceData | null = null;
 
@@ -188,7 +180,6 @@ export function useDashboardData(): DashboardData {
           }
         }
 
-        // Fallback: fetch BTC/ETH prices if not in portfolio
         if (!btcPriceData || !ethPriceData) {
           const [btcRes, ethRes] = await Promise.allSettled([
             !btcPriceData

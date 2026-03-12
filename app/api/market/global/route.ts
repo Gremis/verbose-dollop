@@ -33,7 +33,7 @@ async function fetchGlobalData(): Promise<{
     headers: {
       Accept: "application/json",
     },
-    next: { revalidate: 300 }, // Cache for 5 minutes
+    next: { revalidate: 300 },
   });
 
   if (!res.ok) {
@@ -64,7 +64,6 @@ export async function GET() {
       totalMarketCap: {
         usd: globalData.totalMarketCapUsd,
         change24hPct: globalData.marketCapChange24h,
-        // Format for display: $2.17T
         formatted: `$${(globalData.totalMarketCapUsd / 1_000_000_000_000).toFixed(2)}T`,
       },
       dominance: {
@@ -79,10 +78,9 @@ export async function GET() {
   } catch (error) {
     console.error("[GET /api/market/global] error:", error);
 
-    // Fallback to mock data if API fails
     return NextResponse.json({
       totalMarketCap: {
-        usd: 2170000000000, // $2.17T
+        usd: 2170000000000,
         change24hPct: 0.9,
         formatted: "$2.17T",
       },
@@ -94,7 +92,7 @@ export async function GET() {
         usd: 65000000000,
       },
       updatedAt: new Date().toISOString(),
-      isEstimated: true, // Flag para indicar dados fallback
+      isEstimated: true,
     });
   }
 }

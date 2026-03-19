@@ -35,14 +35,35 @@ type FearGreedData = {
     score: number;
     label: string;
     description: string;
+    narrative: string;
+  };
+  history: {
+    change7d: number | null;
   };
 };
 
 type MarketAnalysisData = {
   analysis: {
     sentiment: "Bullish" | "Bearish" | "Neutral";
-    movement: "Trending Up" | "Trending Down" | "Sideways";
-    bullets: string[];
+    marketTrend: string;
+    phase: string;
+    support: string;
+    resistance: string;
+    structure: string;
+    dashboardSummary: {
+      bullishConfirmation: string;
+      neutralRange: string;
+      bearishBreakdown: string;
+    };
+  };
+  meta: {
+    generatedAt: string;
+    refreshBucket: string;
+    source: string;
+    method: "ai";
+    currentTotalMarketCap: string;
+    basedOn: string[];
+    isEstimated?: boolean;
   };
 };
 

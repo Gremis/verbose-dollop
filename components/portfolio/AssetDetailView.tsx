@@ -57,7 +57,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // State for edit transaction modal
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [selectedTx, setSelectedTx] = useState<TxRow | null>(null);
 
@@ -82,7 +81,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
     void loadData();
   }, [loadData]);
 
-  // Convert transaction data to TxRow format for the modal
   function convertToTxRow(tx: AssetDetail["transactions"][0]): TxRow {
     return {
       id: tx.id,
@@ -105,7 +103,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
   }
 
   async function handleTransactionUpdated() {
-    // Reload data after transaction is updated
     await loadData();
   }
 
@@ -139,7 +136,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
   return (
     <>
       <div>
-        {/* Back button */}
         <div className="flex items-center justify-between mb-6">
           <button
             onClick={onBack}
@@ -149,9 +145,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
           </button>
         </div>
 
-        {/* Balance & Key Levels cards */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
-          {/* Balance Card */}
           <Card className="p-6">
             <div className="flex items-center justify-between mb-2">
               <div className="text-sm text-slate-400 font-semibold">
@@ -252,7 +246,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
             </div>
           </Card>
 
-          {/* Key Levels Card */}
           <Card className="p-6">
             <div className="flex items-start justify-between mb-4">
               <div>
@@ -267,7 +260,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Supports - apenas o primeiro */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 relative overflow-hidden">
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-emerald-500 rounded-l-xl" />
 
@@ -296,7 +288,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                 </div>
               </div>
 
-              {/* Resistances - apenas a primeira */}
               <div className="bg-slate-50 border border-slate-200 rounded-xl p-4 relative overflow-hidden">
                 <div className="absolute left-0 top-0 bottom-0 w-1 bg-red-500 rounded-l-xl" />
 
@@ -328,7 +319,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
           </Card>
         </div>
 
-        {/* Transactions table - NOW WITH EDIT FUNCTIONALITY */}
         <Card className="p-6">
           <div className="flex items-center justify-between mb-4">
             <div className="text-lg font-bold">
@@ -428,7 +418,6 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
         </Card>
       </div>
 
-      {/* Edit Transaction Modal */}
       <AddTransactionModal
         open={editModalOpen}
         onClose={() => {

@@ -455,7 +455,7 @@ export default function DashboardShell({ children }: Props) {
                   <NavChildItem
                     href="/exit-strategy"
                     label="Exit Strategy Simulator"
-                    icon="🚪"
+                    icon="-"
                     showText={sidebarExpanded}
                     pathname={pathname}
                   />
@@ -474,14 +474,14 @@ export default function DashboardShell({ children }: Props) {
                   <NavChildItem
                     href="/strategies"
                     label="Strategy Creator"
-                    icon="🧭"
+                    icon="-"
                     showText={sidebarExpanded}
                     pathname={pathname}
                   />
                   <NavChildItem
                     href="/trade-analyzer"
                     label="Trade Analyzer"
-                    icon="📈"
+                    icon="-"
                     showText={sidebarExpanded}
                     pathname={pathname}
                   />

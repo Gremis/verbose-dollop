@@ -1,4 +1,4 @@
-import type { NextConfig } from "next"
+import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   env: {
@@ -19,10 +19,20 @@ const nextConfig: NextConfig = {
       config.resolve.alias = {
         ...(config.resolve.alias || {}),
         "@napi-rs/canvas": false,
-      }
+      };
     }
-    return config
+    return config;
   },
-}
 
-export default nextConfig
+  async redirects() {
+    return [
+      {
+        source: "/trade-analyzer/:path*",
+        destination: "/dashboard",
+        permanent: false, // 307 redirect - temporary, reversible
+      },
+    ];
+  },
+};
+
+export default nextConfig;

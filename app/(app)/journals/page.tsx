@@ -1,6 +1,7 @@
 "use client";
 
 import React, {
+  Suspense,
   useEffect,
   useMemo,
   useState,
@@ -319,7 +320,7 @@ function MultiSelectDropdown({
   );
 }
 
-export default function JournalPage() {
+function JournalsPageContent() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<JournalRow[]>([]);
@@ -2110,5 +2111,19 @@ export default function JournalPage() {
 
       <JournalFooter />
     </div>
+  );
+}
+
+export default function JournalPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+          Loading journals...
+        </div>
+      }
+    >
+      <JournalsPageContent />
+    </Suspense>
   );
 }

@@ -102,7 +102,13 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
     setEditModalOpen(true);
   }
 
+  function closeEditModal() {
+    setEditModalOpen(false);
+    setSelectedTx(null);
+  }
+
   async function handleTransactionUpdated() {
+    closeEditModal();
     await loadData();
   }
 
@@ -397,14 +403,16 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                           >
                             {usd(tx.gainLossUsd)}
                           </span>
-                          <span
-                            className={cls(
-                              "text-xs",
-                              pnlUp ? "text-emerald-600" : "text-red-600",
-                            )}
-                          >
-                            {pct(tx.gainLossPct)}
-                          </span>
+                          {tx.gainLossPct != null ? (
+                            <span
+                              className={cls(
+                                "text-xs",
+                                pnlUp ? "text-emerald-600" : "text-red-600",
+                              )}
+                            >
+                              {pct(tx.gainLossPct)}
+                            </span>
+                          ) : null}
                         </div>
                       ) : (
                         <span className="text-gray-400">—</span>
@@ -420,10 +428,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
 
       <AddTransactionModal
         open={editModalOpen}
-        onClose={() => {
-          setEditModalOpen(false);
-          setSelectedTx(null);
-        }}
+        onClose={closeEditModal}
         onDone={handleTransactionUpdated}
         mode="edit"
         initialTx={selectedTx}

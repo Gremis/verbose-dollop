@@ -55,12 +55,17 @@ type MarketAnalysisData = {
     };
     thermometer: {
       label: string;
-      tone: "undervalued" | "fair" | "overextended" | "euphoric";
+      tone: "undervalued" | "discounted" | "fair" | "overextended" | "euphoric";
       movingAverage: string;
       distance: string;
       marketTrendCopy: string;
       stakkInsight: string;
-      signal: "Accumulate" | "Scale-Out";
+      signal:
+        | "Accumulate"
+        | "Undervalued"
+        | "Undervalued/Fair Value"
+        | "Fair Value"
+        | "Scale-Out";
     };
     dashboardSummary: {
       bullishConfirmation: string;
@@ -75,7 +80,6 @@ type MarketAnalysisData = {
     method: "ai";
     currentBtcPrice: string;
     basedOn: string[];
-    isEstimated?: boolean;
   };
 };
 

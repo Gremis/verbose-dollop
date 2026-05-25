@@ -12,9 +12,16 @@ import {
 export type MarketTrend = "Bullish" | "Bearish" | "Range Bound";
 export type ThermometerTone =
   | "undervalued"
+  | "discounted"
   | "fair"
   | "overextended"
   | "euphoric";
+export type StakkSignal =
+  | "Accumulate"
+  | "Undervalued"
+  | "Undervalued/Fair Value"
+  | "Fair Value"
+  | "Scale-Out";
 
 type CoinGeckoGlobalResponse = {
   data?: {
@@ -34,6 +41,25 @@ type CoinGeckoPriceResponse = {
 type CoinGeckoMarketChartResponse = {
   prices?: Array<[number, number]>;
 };
+
+type BinanceTickerResponse = {
+  price?: string;
+};
+
+type BinanceKline = [
+  number,
+  string,
+  string,
+  string,
+  string,
+  string,
+  number,
+  string,
+  number,
+  string,
+  string,
+  string,
+];
 
 type FearGreedResponse = {
   data?: Array<{
@@ -72,7 +98,7 @@ export type StructuredMarketAnalysis = AiBitcoinAnalysis & {
     distance: string;
     marketTrendCopy: string;
     stakkInsight: string;
-    signal: "Accumulate" | "Scale-Out";
+    signal: StakkSignal;
   };
   dashboardSummary: {
     bullishConfirmation: string;
@@ -91,7 +117,6 @@ export type AnalysisResponse = {
     currentBtcPrice: string;
     chartPoints: number;
     basedOn: string[];
-    isEstimated?: boolean;
   };
 };
 
@@ -102,7 +127,7 @@ const openai = process.env.OPENAI_API_KEY
 const MARKET_HOME_ANALYSIS_TAG = "market-home-analysis";
 const NEW_YORK_TZ = "America/New_York";
 const REFRESH_HOURS = [1, 5, 9, 13, 17, 21] as const;
-const TWO_HUNDRED_WEEKS_IN_DAYS = 200 * 7;
+const TWO_HUNDRED_WEEKS = 200;
 
 function coinGeckoHeaders(): Record<string, string> {
   const headers: Record<string, string> = {
@@ -115,6 +140,59 @@ function coinGeckoHeaders(): Record<string, string> {
   }
 
   return headers;
+}
+
+function coinGeckoBaseUrl(): string {
+  return process.env.COINGECKO_PRO === "true"
+    ? "https://pro-api.coingecko.com/api/v3"
+    : "https://api.coingecko.com/api/v3";
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function coinGeckoFetch(url: string): Promise<Response> {
+  const tries = 3;
+
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const res = await fetch(url, {
+      headers: coinGeckoHeaders(),
+      cache: "no-store",
+    });
+
+    if (res.ok) return res;
+
+    if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+      await sleep(250 * 2 ** attempt);
+      continue;
+    }
+
+    return res;
+  }
+
+  return fetch(url, {
+    headers: coinGeckoHeaders(),
+    cache: "no-store",
+  });
+}
+
+async function binanceFetch(url: string): Promise<Response> {
+  const tries = 3;
+
+  for (let attempt = 0; attempt < tries; attempt++) {
+    const res = await fetch(url, { cache: "no-store" });
+    if (res.ok) return res;
+
+    if (res.status === 429 || (res.status >= 500 && res.status <= 599)) {
+      await sleep(250 * 2 ** attempt);
+      continue;
+    }
+
+    return res;
+  }
+
+  return fetch(url, { cache: "no-store" });
 }
 
 function normalizeTrend(value: unknown): MarketTrend | unknown {
@@ -162,6 +240,31 @@ function formatRange(zone: { low: number; high: number }): string {
   const low = Math.min(zone.low, zone.high);
   const high = Math.max(zone.low, zone.high);
   return `${formatUsd(low)} - ${formatUsd(high)}`;
+}
+
+function getUtcWeekKey(timestamp: number): string {
+  const date = new Date(timestamp);
+  const day = date.getUTCDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  const monday = new Date(
+    Date.UTC(
+      date.getUTCFullYear(),
+      date.getUTCMonth(),
+      date.getUTCDate() + mondayOffset,
+    ),
+  );
+
+  return monday.toISOString().slice(0, 10);
+}
+
+function getWeeklyCloses(points: MarketCapChartPoint[]): MarketCapChartPoint[] {
+  const weekly = new Map<string, MarketCapChartPoint>();
+
+  for (const point of points) {
+    weekly.set(getUtcWeekKey(point.timestamp), point);
+  }
+
+  return [...weekly.values()].sort((a, b) => a.timestamp - b.timestamp);
 }
 
 function parseJsonIfValid<T>(response: Response): Promise<T | null> {
@@ -235,52 +338,64 @@ async function fetchCurrentBitcoinContext(): Promise<{
   context: BitcoinContext;
   series: MarketCapChartPoint[];
 }> {
-  const [priceRes, chartRes, fallbackChartRes, globalRes, fearGreedRes] =
+  const cgBase = coinGeckoBaseUrl();
+  const [
+    priceRes,
+    chartRes,
+    fallbackChartRes,
+    binanceTickerRes,
+    binanceWeeklyRes,
+    globalRes,
+    fearGreedRes,
+  ] =
     await Promise.allSettled([
-    fetch(
-      "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true",
-      { headers: coinGeckoHeaders(), cache: "no-store" },
+    coinGeckoFetch(
+      `${cgBase}/simple/price?ids=bitcoin&vs_currencies=usd&include_24hr_change=true`,
     ),
-    fetch(
-      "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=1500&interval=daily",
-      { headers: coinGeckoHeaders(), cache: "no-store" },
+    coinGeckoFetch(
+      `${cgBase}/coins/bitcoin/market_chart?vs_currency=usd&days=1500&interval=daily`,
     ),
-    fetch(
-      "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=max",
-      { headers: coinGeckoHeaders(), cache: "no-store" },
+    coinGeckoFetch(
+      `${cgBase}/coins/bitcoin/market_chart?vs_currency=usd&days=max`,
     ),
-    fetch("https://api.coingecko.com/api/v3/global", {
-      headers: coinGeckoHeaders(),
-      cache: "no-store",
-    }),
+    binanceFetch(
+      "https://api.binance.com/api/v3/ticker/price?symbol=BTCUSDT",
+    ),
+    binanceFetch(
+      "https://api.binance.com/api/v3/klines?symbol=BTCUSDT&interval=1w&limit=200",
+    ),
+    coinGeckoFetch(`${cgBase}/global`),
     fetch("https://api.alternative.me/fng/?limit=1", {
       headers: { Accept: "application/json" },
       cache: "no-store",
     }),
   ]);
 
-  if (priceRes.status !== "fulfilled" || !priceRes.value.ok) {
-    throw new Error("Bitcoin price unavailable");
-  }
-
-  const price = await parseJsonIfValid<CoinGeckoPriceResponse>(priceRes.value);
-  const chartResponse =
+  const price =
+    priceRes.status === "fulfilled" && priceRes.value.ok
+      ? await parseJsonIfValid<CoinGeckoPriceResponse>(priceRes.value)
+      : null;
+  const chart =
     chartRes.status === "fulfilled" && chartRes.value.ok
-      ? chartRes.value
-      : fallbackChartRes.status === "fulfilled" && fallbackChartRes.value.ok
-        ? fallbackChartRes.value
-        : null;
-  const chart = chartResponse
-    ? await parseJsonIfValid<CoinGeckoMarketChartResponse>(chartResponse)
-    : null;
-  const btcPriceUsd = price?.bitcoin?.usd;
+      ? await parseJsonIfValid<CoinGeckoMarketChartResponse>(chartRes.value)
+      : null;
+  const fallbackChart =
+    fallbackChartRes.status === "fulfilled" && fallbackChartRes.value.ok
+      ? await parseJsonIfValid<CoinGeckoMarketChartResponse>(
+          fallbackChartRes.value,
+        )
+      : null;
+  const binanceTicker =
+    binanceTickerRes.status === "fulfilled" && binanceTickerRes.value.ok
+      ? await parseJsonIfValid<BinanceTickerResponse>(binanceTickerRes.value)
+      : null;
+  const binanceWeekly =
+    binanceWeeklyRes.status === "fulfilled" && binanceWeeklyRes.value.ok
+      ? await parseJsonIfValid<BinanceKline[]>(binanceWeeklyRes.value)
+      : null;
 
-  if (!Number.isFinite(btcPriceUsd) || !btcPriceUsd || btcPriceUsd <= 0) {
-    throw new Error("Bitcoin price missing from CoinGecko response");
-  }
-
-  const rawPrices =
-    chart?.prices
+  const toPricePoints = (data: CoinGeckoMarketChartResponse | null) =>
+    data?.prices
       ?.filter(
         (point): point is [number, number] =>
           Array.isArray(point) &&
@@ -290,21 +405,50 @@ async function fetchCurrentBitcoinContext(): Promise<{
       )
       .map(([timestamp, value]) => ({ timestamp, value })) ?? [];
 
-  const syntheticPrices =
-    rawPrices.length >= 30
-      ? rawPrices
-      : Array.from({ length: 30 }, (_, index) => ({
-          timestamp: Date.now() - (29 - index) * 86_400_000,
-          value: btcPriceUsd * (0.985 + index * 0.001),
-        }));
-  const maSource = rawPrices.length >= TWO_HUNDRED_WEEKS_IN_DAYS
-    ? rawPrices
-    : syntheticPrices;
-  const maWindow = maSource.slice(-TWO_HUNDRED_WEEKS_IN_DAYS);
+  const chartPrices = toPricePoints(chart);
+  const fallbackPrices = toPricePoints(fallbackChart);
+  const binanceWeeklyPrices =
+    binanceWeekly
+      ?.filter(
+        (point): point is BinanceKline =>
+          Array.isArray(point) &&
+          Number.isFinite(point[0]) &&
+          Number.isFinite(Number(point[4])) &&
+          Number(point[4]) > 0,
+      )
+      .map((point) => ({
+        timestamp: point[0],
+        value: Number(point[4]),
+      })) ?? [];
+  const coinGeckoPrices =
+    fallbackPrices.length > chartPrices.length ? fallbackPrices : chartPrices;
+  const rawPrices =
+    coinGeckoPrices.length > 0 ? coinGeckoPrices : binanceWeeklyPrices;
+
+  const latestChartPrice = rawPrices.at(-1)?.value;
+  const previousChartPrice = rawPrices.at(-2)?.value;
+  const binancePrice = Number(binanceTicker?.price);
+  const btcPriceUsd =
+    Number.isFinite(price?.bitcoin?.usd) && price?.bitcoin?.usd
+      ? price.bitcoin.usd
+      : Number.isFinite(binancePrice) && binancePrice > 0
+        ? binancePrice
+      : latestChartPrice;
+
+  if (!Number.isFinite(btcPriceUsd) || !btcPriceUsd || btcPriceUsd <= 0) {
+    throw new Error("Bitcoin price unavailable");
+  }
+
+  const weeklyCloses = getWeeklyCloses(rawPrices);
+  if (weeklyCloses.length < TWO_HUNDRED_WEEKS) {
+    throw new Error(
+      `Bitcoin 200W moving average history unavailable (${weeklyCloses.length} weekly points received)`,
+    );
+  }
+
+  const maWindow = weeklyCloses.slice(-TWO_HUNDRED_WEEKS);
   const twoHundredWeekMa =
-    rawPrices.length >= TWO_HUNDRED_WEEKS_IN_DAYS
-      ? maWindow.reduce((sum, point) => sum + point.value, 0) / maWindow.length
-      : btcPriceUsd / 1.04;
+    maWindow.reduce((sum, point) => sum + point.value, 0) / maWindow.length;
   const distanceFromMaPct =
     ((btcPriceUsd - twoHundredWeekMa) / twoHundredWeekMa) * 100;
 
@@ -338,6 +482,8 @@ async function fetchCurrentBitcoinContext(): Promise<{
       btcChange24hPct:
         typeof price?.bitcoin?.usd_24h_change === "number"
           ? price.bitcoin.usd_24h_change
+          : previousChartPrice && previousChartPrice > 0
+            ? ((btcPriceUsd - previousChartPrice) / previousChartPrice) * 100
           : 0,
       btcDominance,
       twoHundredWeekMa,
@@ -345,7 +491,7 @@ async function fetchCurrentBitcoinContext(): Promise<{
       fearGreedScore,
       fearGreedLabel,
     },
-    series: syntheticPrices.slice(-30),
+    series: rawPrices.slice(-30),
   };
 }
 
@@ -354,14 +500,14 @@ function getThermometer(distancePct: number): {
   tone: ThermometerTone;
   marketTrendCopy: string;
   stakkInsight: string;
-  signal: "Accumulate" | "Scale-Out";
+  signal: StakkSignal;
 } {
   if (distancePct >= 200) {
     return {
-      label: "Euphoric Territory",
+      label: "Euphoric",
       tone: "euphoric",
       marketTrendCopy:
-        "Bitcoin is trading extremely far above its 200W MA, placing price in the Euphoric zone relative to historical cycle trends. Historically, this level of extension has occurred during peak market euphoria, where momentum and speculation accelerate rapidly before major cycle tops and heightened volatility.",
+        "Bitcoin is trading extremely far above its 200W MA, placing price in the Euphoric zone relative to historical cycle trends. Historically, this level of extension has occurred during peak market euphoria, where momentum and speculation accelerate rapidly before major cycle tops and periods of heightened volatility.",
       stakkInsight:
         "We suggest aggressively scaling out positions, systematically locking in profits, and avoiding emotional late-cycle buying behavior.",
       signal: "Scale-Out",
@@ -373,7 +519,7 @@ function getThermometer(distancePct: number): {
       label: "Overvalued",
       tone: "overextended",
       marketTrendCopy:
-        "Bitcoin is trading significantly above its 200W MA, placing price in the Overvalued zone based on historical cycle behavior. Historically, moves this far above the long-term trend have signaled increasing market optimism and elevated speculative activity.",
+        "Bitcoin is trading significantly above its 200W MA, placing price in the Overvalued zone based on historical cycle behavior. Historically, moves this far above the long-term trend have signaled increasing market optimism and elevated speculative activity, often occurring during the later stages of bullish expansions.",
       stakkInsight:
         "We suggest reducing aggressive buying behavior and beginning gradual scale-outs into strength to protect gains and reduce cycle risk.",
       signal: "Scale-Out",
@@ -385,22 +531,22 @@ function getThermometer(distancePct: number): {
       label: "Fair Value",
       tone: "fair",
       marketTrendCopy:
-        "Bitcoin is trading moderately above its 200W MA, placing price in the Fair Value zone relative to historical cycle positioning. This range has historically represented balanced market conditions where Bitcoin remains in a healthy long-term uptrend without major overextension.",
+        "Bitcoin is trading moderately above its 200W MA, placing price in the Fair Value zone relative to historical cycle positioning. This range has historically represented balanced market conditions where Bitcoin remains in a healthy long-term uptrend without showing signs of major overextension.",
       stakkInsight:
         "We suggest consistently DCA'ing while maintaining balanced exposure and avoiding emotional over-positioning.",
-      signal: "Accumulate",
+      signal: "Fair Value",
     };
   }
 
   if (distancePct >= 0) {
     return {
-      label: "Undervalued / Fair",
-      tone: "undervalued",
+      label: "Discounted Value",
+      tone: "discounted",
       marketTrendCopy:
-        "Bitcoin is trading slightly above its 200W MA, placing price in a Discounted Value zone based on historical distance from the long-term cycle trend. Historically, this area has represented a value accumulation zone where long-term investors have accumulated Bitcoin.",
+        "Bitcoin is trading slightly above its 200W MA, placing price in the Discounted Value zone based on historical distance from the long-term cycle trend. Historically, this area has represented a deep value accumulation zone where long-term investors have aggressively accumulated Bitcoin.",
       stakkInsight:
         "We suggest continuing to DCA into Bitcoin, but less aggressively than in deeply undervalued conditions.",
-      signal: "Accumulate",
+      signal: "Undervalued/Fair Value",
     };
   }
 
@@ -408,10 +554,10 @@ function getThermometer(distancePct: number): {
     label: "Undervalued",
     tone: "undervalued",
     marketTrendCopy:
-      "Bitcoin is trading below its 200W MA, placing price in the Undervalued zone relative to its long-term cycle trend. Historically, periods below the 200W MA have occurred during deep bear market conditions and have represented some of the strongest long-term accumulation opportunities.",
+      "Bitcoin is trading below its 200W MA, placing price in the Undervalued zone relative to its long-term cycle trend. Historically, periods below the 200W MA have occurred during deep bear market conditions and have represented some of the strongest long-term accumulation opportunities for patient investors.",
     stakkInsight:
       "We suggest aggressively DCA'ing into Bitcoin during this zone, as historically this has been one of the highest long-term value areas of the cycle.",
-    signal: "Accumulate",
+    signal: "Undervalued",
   };
 }
 
@@ -560,42 +706,20 @@ function enrichAnalysis(
   };
 }
 
-function getFallbackAiAnalysis(context: BitcoinContext): AiBitcoinAnalysis {
-  const price = context.btcPriceUsd;
-  const bullishLow = Math.round((price * 1.04) / 100) * 100;
-  const bullishHigh = Math.round((price * 1.1) / 100) * 100;
-  const bearishHigh = Math.round((price * 0.96) / 100) * 100;
-  const bearishLow = Math.round((price * 0.9) / 100) * 100;
-
-  return {
-    marketTrend:
-      context.btcChange24hPct >= 3
-        ? "Bullish"
-        : context.btcChange24hPct <= -3
-          ? "Bearish"
-          : "Range Bound",
-    bullishZone: {
-      low: bullishLow,
-      high: bullishHigh,
-    },
-    bearishZone: {
-      low: bearishLow,
-      high: bearishHigh,
-    },
-  };
-}
-
 async function generateLiveAnalysis(): Promise<AnalysisResponse> {
   const now = new Date();
   const refreshBucket = getRefreshBucket(now);
   const { context, series } = await fetchCurrentBitcoinContext();
   const ai = await maybeGenerateAiAnalysis(context, series);
-  const isEstimated = !ai;
+
+  if (!ai) {
+    throw new Error("AI Bitcoin analysis unavailable");
+  }
 
   const generatedAt = new Date().toISOString();
 
   return {
-    analysis: enrichAnalysis(ai ?? getFallbackAiAnalysis(context), context),
+    analysis: enrichAnalysis(ai, context),
     meta: {
       generatedAt,
       refreshBucket,
@@ -610,7 +734,6 @@ async function generateLiveAnalysis(): Promise<AnalysisResponse> {
         "alternative_me_fear_greed",
         "generated_on_request",
       ],
-      isEstimated,
     },
   };
 }

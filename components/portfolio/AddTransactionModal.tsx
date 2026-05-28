@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Modal from "@/components/ui/Modal";
 import { MoneyInputStandalone } from "@/components/form/MaskedFields";
 import { cls, usd } from "@/components/portfolio/format";
@@ -46,6 +46,7 @@ export default function AddTransactionModal(props: {
   onDone: () => Promise<void>;
   mode?: "add" | "edit";
   initialTx?: TxRow | null;
+  initialAsset?: AssetPick | null;
 }) {
   const mode = props.mode ?? "add";
   const [step, setStep] = useState<Step>("pick");
@@ -123,6 +124,39 @@ export default function AddTransactionModal(props: {
     });
   }, [props.open, mode, props.initialTx]);
 
+  const loadMarketPrice = useCallback(async (id: string) => {
+    setConfirmDeleteOpen(false);
+
+    const res = await fetch(
+      `/api/portfolio/assets/price?id=${encodeURIComponent(id)}`,
+      { cache: "no-store" },
+    );
+    if (!res.ok) return;
+    const j = (await res.json()) as PriceResponse;
+    const p = Number(j.priceUsd ?? 0);
+    setPriceRaw(p > 0 ? String(p) : "");
+  }, []);
+
+  useEffect(() => {
+    if (!props.open) return;
+    if (mode !== "add") return;
+    if (!props.initialAsset) return;
+
+    const asset = props.initialAsset;
+    setSelected(asset);
+    setStep("form");
+    setSide("buy");
+    setPriceMode(asset.priceUsd != null && asset.priceUsd > 0 ? "custom" : "market");
+    setPriceRaw(asset.priceUsd != null && asset.priceUsd > 0 ? String(asset.priceUsd) : "");
+    setAmountRaw("");
+    setTotalRaw("");
+    lastEdited.current = null;
+
+    if (asset.priceUsd == null || asset.priceUsd <= 0) {
+      void loadMarketPrice(asset.id);
+    }
+  }, [loadMarketPrice, props.open, mode, props.initialAsset]);
+
   useEffect(() => {
     if (!props.open) return;
     (async () => {
@@ -180,19 +214,6 @@ export default function AddTransactionModal(props: {
       priceMode === "market" ? "Market Price (USD)" : "Custom Price (USD)",
     [priceMode],
   );
-
-  async function loadMarketPrice(id: string) {
-    revealConfirmDeleteIfOpen(false);
-
-    const res = await fetch(
-      `/api/portfolio/assets/price?id=${encodeURIComponent(id)}`,
-      { cache: "no-store" },
-    );
-    if (!res.ok) return;
-    const j = (await res.json()) as PriceResponse;
-    const p = Number(j.priceUsd ?? 0);
-    setPriceRaw(p > 0 ? String(p) : "");
-  }
 
   function revealConfirmDeleteIfOpen(open: boolean) {
     setConfirmDeleteOpen(open);

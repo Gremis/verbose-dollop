@@ -69,8 +69,7 @@ export default function DashboardShell({ children }: Props) {
     pathname === "/strategies" ||
     pathname === "/trade-analyzer";
 
-  const portfolioGroupActive =
-    pathname === "/portfolio" || pathname === "/exit-strategy";
+  const portfolioGroupActive = pathname === "/portfolio";
 
   const topNavLinkBase =
     "text-sm px-3 py-2 rounded-xl transition-colors whitespace-nowrap";
@@ -126,16 +125,6 @@ export default function DashboardShell({ children }: Props) {
                   }`}
                 >
                   Strategy Creator
-                </Link>
-                <Link
-                  href="/exit-strategy"
-                  className={`${topNavLinkBase} ${
-                    isTopActive("/exit-strategy")
-                      ? topNavActive
-                      : topNavInactive
-                  }`}
-                >
-                  Exit Strategy
                 </Link>
                 <Link
                   href="/trade-analyzer"
@@ -310,7 +299,7 @@ export default function DashboardShell({ children }: Props) {
                         <Link
                           href="/exit-strategy"
                           onClick={() => setMobileOpen(false)}
-                          className={`flex items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
+                          className={`hidden items-center justify-between gap-3 rounded-2xl px-4 py-3 border transition-all ${
                             isTopActive("/exit-strategy")
                               ? "border-transparent bg-[#F1EAFE] text-[#4C1D95] shadow-[0_10px_24px_rgba(124,58,237,0.16)]"
                               : "border-transparent text-[#14121A] hover:bg-white/80 hover:border-[#E3DEF7]"
@@ -320,7 +309,9 @@ export default function DashboardShell({ children }: Props) {
                             <span className="h-8 w-8 rounded-full bg-white/80 grid place-items-center text-lg">
                               🚪
                             </span>
-                            <span className="font-medium">Exit Strategy</span>
+                            <span className="font-medium sr-only">
+                              Exit Strategy
+                            </span>
                           </div>
                           <span className="text-xs text-[#9C92D4]">
                             {isTopActive("/exit-strategy") ? "Current" : ""}
@@ -663,7 +654,7 @@ function NavGroup({
           </span>
         </Link>
 
-        {showText && (
+        {showText && label !== "Portfolio Manager" && (
           <button
             type="button"
             onClick={(e) => {
@@ -694,7 +685,9 @@ function NavGroup({
         )}
       </div>
 
-      {showText && open && <ul className="mt-1 grid gap-1">{children}</ul>}
+      {showText && open && label !== "Portfolio Manager" && (
+        <ul className="mt-1 grid gap-1">{children}</ul>
+      )}
     </li>
   );
 }
@@ -712,6 +705,8 @@ function NavChildItem({
   showText?: boolean;
   pathname?: string;
 }) {
+  if (href === "/exit-strategy") return null;
+
   const isActive = pathname === href;
 
   return (

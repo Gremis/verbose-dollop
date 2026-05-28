@@ -55,7 +55,7 @@ type MarketAnalysisData = {
     };
     thermometer: {
       label: string;
-      tone: "undervalued" | "fair" | "overextended" | "euphoric";
+      tone: "undervalued" | "discounted" | "fair" | "overextended" | "euphoric";
       movingAverage: string;
       distance: string;
       marketTrendCopy: string;
@@ -75,7 +75,6 @@ type MarketAnalysisData = {
     method: "ai";
     currentBtcPrice: string;
     basedOn: string[];
-    isEstimated?: boolean;
   };
 };
 

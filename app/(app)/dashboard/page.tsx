@@ -46,7 +46,6 @@ function formatGeneratedDate(
   input: string | undefined,
   refreshBucket: string | undefined,
 ) {
-  const fallbackDate = new Date();
   const bucket = parseRefreshBucket(refreshBucket);
   if (bucket) {
     const approxDate = new Date(
@@ -63,13 +62,7 @@ function formatGeneratedDate(
     return `- ${formattedDate} ${bucketHour12}:00 ${bucketPeriod} ET`;
   }
 
-  if (!input) {
-    return `- ${fallbackDate.toLocaleDateString("en-US", {
-      month: "short",
-      day: "2-digit",
-      year: "numeric",
-    })} 9:00 AM ET`;
-  }
+  if (!input) return "-";
   const parsed = new Date(input);
   if (Number.isNaN(parsed.getTime())) return "-";
 
@@ -116,6 +109,9 @@ function getTrendBadgeClass(trend: string) {
 function getThermometerBadgeClass(tone: string) {
   const base =
     "inline-flex w-fit items-center rounded-full border px-3.5 py-2.5 text-[15px] font-black";
+  if (tone === "discounted") {
+    return `${base} border-green-200 bg-green-50 text-green-700`;
+  }
   if (tone === "fair") {
     return `${base} border-[rgba(124,58,237,0.18)] bg-[#F1EAFE] text-[#6D28D9]`;
   }
@@ -211,6 +207,7 @@ export default function DashboardPage() {
   const analysis = marketAnalysis?.analysis ?? null;
   const thermometer = analysis?.thermometer ?? null;
   const analysisMeta = marketAnalysis?.meta;
+  const analysisUnavailable = !loading && !analysis;
   const fearGreedScore = fearGreed?.current.score;
   const fearGreedLabel =
     fearGreed?.current.label ?? getFearGreedLabel(fearGreedScore);
@@ -339,7 +336,10 @@ export default function DashboardPage() {
                       thermometer?.tone ?? "undervalued",
                     )}
                   >
-                    {thermometer?.label ?? "Loading market data"}
+                    {thermometer?.label ??
+                      (analysisUnavailable
+                        ? "Market data unavailable"
+                        : "Loading market data")}
                   </span>
                 </div>
 
@@ -353,20 +353,25 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <span className={getTrendBadgeClass(analysis?.marketTrend ?? "")}>
-                    {analysis?.marketTrend ?? "Loading"}
+                    {analysis?.marketTrend ??
+                      (analysisUnavailable ? "Unavailable" : "Loading")}
                   </span>
                 </div>
               </div>
 
               <p className="max-w-[95%] text-[15px] leading-7 text-[#6B6777]">
                 {thermometer?.marketTrendCopy ??
-                  "Bitcoin market analysis is loading from live BTC data."}
+                  (analysisUnavailable
+                    ? "Bitcoin market analysis is currently unavailable."
+                    : "Bitcoin market analysis is loading from live BTC data.")}
               </p>
 
               <div className="mt-3 rounded-[14px] border border-[rgba(124,58,237,0.12)] bg-white px-3.5 py-3 text-[14px] leading-[1.55] text-[#6B6777]">
                 <strong className="text-[#14121A]">Stakk Insight:</strong>{" "}
                 {thermometer?.stakkInsight ??
-                  "The Stakk signal will appear as soon as BTC market data is available."}
+                  (analysisUnavailable
+                    ? "The Stakk signal could not be generated from the latest BTC data."
+                    : "The Stakk signal will appear as soon as BTC market data is available.")}
               </div>
             </div>
 
@@ -376,7 +381,8 @@ export default function DashboardPage() {
                   200W MA
                 </div>
                 <div className="text-[15px] font-black leading-[1.35] text-[#14121A]">
-                  {thermometer?.movingAverage ?? "$0"}
+                  {thermometer?.movingAverage ??
+                    (analysisUnavailable ? "Unavailable" : "$0")}
                 </div>
               </div>
 
@@ -385,7 +391,8 @@ export default function DashboardPage() {
                   Distance
                 </div>
                 <div className="text-[15px] font-black leading-[1.35] text-[#14121A]">
-                  {thermometer?.distance ?? "0.0%"}
+                  {thermometer?.distance ??
+                    (analysisUnavailable ? "Unavailable" : "0.0%")}
                 </div>
               </div>
 
@@ -395,7 +402,8 @@ export default function DashboardPage() {
                 </div>
                 <div className="mt-2">
                   <span className={getSignalBadgeClass(thermometer?.signal ?? "")}>
-                    {thermometer?.signal ?? "Loading"}
+                    {thermometer?.signal ??
+                      (analysisUnavailable ? "Unavailable" : "Loading")}
                   </span>
                 </div>
               </div>
@@ -405,11 +413,6 @@ export default function DashboardPage() {
               <div className="text-[13px] text-[#6B6777]">
                 Updated <b>{analysisUpdated}</b>
               </div>
-              {analysisMeta?.isEstimated && (
-                <span className="rounded-full border border-[#E9E6F2] bg-white px-3 py-1.5 text-[12px] font-bold text-[#6B6777]">
-                  Estimated fallback
-                </span>
-              )}
             </div>
           </div>
         </article>

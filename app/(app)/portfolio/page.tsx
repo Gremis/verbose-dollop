@@ -178,6 +178,9 @@ export default function PortfolioPage() {
   );
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [exitStrategiesError, setExitStrategiesError] = useState<string | null>(
+    null,
+  );
   const [modalOpen, setModalOpen] = useState(false);
   const [editingTx, setEditingTx] = useState<TxRow | null>(null);
   const [activeTab, setActiveTab] = useState<PortfolioTab>("assets");
@@ -187,19 +190,32 @@ export default function PortfolioPage() {
   async function load() {
     setLoading(true);
     setError(null);
+    setExitStrategiesError(null);
     try {
-      const [portfolioRes, strategiesRes] = await Promise.all([
-        fetch("/api/portfolio", { cache: "no-store" }),
-        fetch("/api/exit-strategies", { cache: "no-store" }),
-      ]);
+      const portfolioRes = await fetch("/api/portfolio", { cache: "no-store" });
       if (!portfolioRes.ok) throw new Error(`HTTP ${portfolioRes.status}`);
-      if (!strategiesRes.ok) throw new Error(`HTTP ${strategiesRes.status}`);
-
       const portfolioJson = (await portfolioRes.json()) as PortfolioApiRes;
-      const strategiesJson =
-        (await strategiesRes.json()) as ExitStrategiesApiRes;
       setData(portfolioJson);
-      setExitStrategies(strategiesJson.data ?? []);
+
+      try {
+        const strategiesRes = await fetch("/api/exit-strategies", {
+          cache: "no-store",
+        });
+        if (!strategiesRes.ok) {
+          throw new Error(`HTTP ${strategiesRes.status}`);
+        }
+
+        const strategiesJson =
+          (await strategiesRes.json()) as ExitStrategiesApiRes;
+        setExitStrategies(strategiesJson.data ?? []);
+      } catch (strategyError) {
+        setExitStrategies([]);
+        setExitStrategiesError(
+          strategyError instanceof Error
+            ? strategyError.message
+            : "Failed to load exit strategies",
+        );
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -358,7 +374,10 @@ export default function PortfolioPage() {
                     }}
                   />
                 ) : (
-                  <ExitStrategiesList items={exitStrategies} />
+                  <ExitStrategiesList
+                    items={exitStrategies}
+                    error={exitStrategiesError}
+                  />
                 )}
               </div>
             </Card>
@@ -388,7 +407,21 @@ export default function PortfolioPage() {
   );
 }
 
-function ExitStrategiesList({ items }: { items: ExitStrategySummary[] }) {
+function ExitStrategiesList({
+  items,
+  error,
+}: {
+  items: ExitStrategySummary[];
+  error: string | null;
+}) {
+  if (error) {
+    return (
+      <div className="rounded-xl border border-red-100 bg-red-50 p-6 text-center text-sm text-red-600">
+        Failed to load exit strategies: {error}
+      </div>
+    );
+  }
+
   if (items.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-slate-200 bg-slate-50 p-6 text-center text-sm text-slate-500">

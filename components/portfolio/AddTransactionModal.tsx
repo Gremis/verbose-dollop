@@ -146,8 +146,12 @@ export default function AddTransactionModal(props: {
     setSelected(asset);
     setStep("form");
     setSide("buy");
-    setPriceMode(asset.priceUsd != null && asset.priceUsd > 0 ? "custom" : "market");
-    setPriceRaw(asset.priceUsd != null && asset.priceUsd > 0 ? String(asset.priceUsd) : "");
+    setPriceMode("market");
+    setPriceRaw(
+      asset.priceUsd != null && asset.priceUsd > 0
+        ? String(asset.priceUsd)
+        : "",
+    );
     setAmountRaw("");
     setTotalRaw("");
     lastEdited.current = null;
@@ -242,6 +246,7 @@ export default function AddTransactionModal(props: {
 
   const canDelete =
     mode === "edit" && step !== "pick" && !!props.initialTx?.id && !busy;
+  const hasLockedInitialAsset = mode === "add" && !!props.initialAsset;
 
   async function handleDeleteNow() {
     if (!props.initialTx?.id) return;
@@ -603,20 +608,22 @@ export default function AddTransactionModal(props: {
               the price is automatically retrieved and remains read-only.
             </div>
 
-            <button
-              className="text-xs text-slate-500 underline justify-self-start"
-              onClick={async () => {
-                setStep("pick");
-                setSelected(null);
-                setAmountRaw("");
-                setTotalRaw("");
-                setPriceRaw("");
-                lastEdited.current = null;
-              }}
-              type="button"
-            >
-              Back to asset selection
-            </button>
+            {!hasLockedInitialAsset && (
+              <button
+                className="text-xs text-slate-500 underline justify-self-start"
+                onClick={async () => {
+                  setStep("pick");
+                  setSelected(null);
+                  setAmountRaw("");
+                  setTotalRaw("");
+                  setPriceRaw("");
+                  lastEdited.current = null;
+                }}
+                type="button"
+              >
+                Back to asset selection
+              </button>
+            )}
           </div>
         )}
       </Modal>

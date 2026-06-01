@@ -102,6 +102,11 @@ function num(n: number | null | undefined, digits = 2) {
   return n.toLocaleString("en-US", { maximumFractionDigits: digits });
 }
 
+function signedPct(n: number | null | undefined, digits = 2) {
+  if (n == null || !Number.isFinite(n)) return "-";
+  return `${n >= 0 ? "+" : ""}${n.toFixed(digits)}%`;
+}
+
 function round(n: number, digits: number) {
   const p = 10 ** digits;
   return Math.round(n * p) / p;
@@ -161,7 +166,7 @@ function ScaleOutPlanList({
             className="grid grid-cols-[78px_1fr_auto] items-center gap-3 rounded-[10px] border border-slate-200 bg-slate-50 px-3 py-3"
           >
             <div className="inline-flex h-7 items-center justify-center rounded-full bg-[#eef3fb] px-2.5 text-[11px] font-bold text-[#4f7bb8]">
-              +{num(row.gainPercent, 0)}%
+              {signedPct(row.gainPercent, 0)}
             </div>
             <div>
               <div className="text-[10px] font-bold text-slate-600">
@@ -476,7 +481,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                     totalProfitUp ? "text-emerald-600" : "text-red-600",
                   )}
                 >
-                  {pct(data.metrics.totalProfit.pct)}
+                  {signedPct(data.metrics.totalProfit.pct)}
                 </div>
               </div>
             </div>
@@ -502,7 +507,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                     change24Up ? "text-emerald-600" : "text-red-600",
                   )}
                 >
-                  {pct(data.metrics.change24h.pct ?? 0)}
+                  {signedPct(data.metrics.change24h.pct ?? 0)}
                 </div>
               </div>
 
@@ -524,7 +529,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
                     totalProfitUp ? "text-emerald-600" : "text-red-600",
                   )}
                 >
-                  {pct(data.metrics.totalProfit.pct)}
+                  {signedPct(data.metrics.totalProfit.pct)}
                 </div>
               </div>
 
@@ -755,7 +760,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
       {strategyModalOpen && (
         <Modal
           open
-          title={activeStrategy ? "Change Exit Strategy" : "Add Exit Strategy"}
+          title="Add Exit Strategy"
           onClose={() => (savingStrategy ? null : setStrategyModalOpen(false))}
           footer={
             <div className="flex items-center justify-end gap-3">
@@ -803,11 +808,8 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
               <div className="text-xs text-slate-500 font-semibold mb-2">
                 Assets
               </div>
-              <div className="inline-flex items-center rounded-full bg-white px-3 py-1.5 text-sm font-bold text-slate-800 ring-1 ring-slate-200">
+              <div className="inline-flex items-center rounded-full bg-purple-100 px-3 py-1.5 text-sm font-bold text-purple-700">
                 {symbol} x
-              </div>
-              <div className="text-sm text-slate-500 mt-1">
-                Reference price: {usd(data.metrics.avgBuyPrice)}
               </div>
             </div>
 
@@ -822,7 +824,7 @@ export default function AssetDetailView({ symbol, onBack }: Props) {
               </select>
             </label>
 
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div className="grid gap-3">
               <label className="grid gap-1">
                 <span className="text-xs text-gray-500">Sell %</span>
                 <input

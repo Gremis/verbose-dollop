@@ -1,145 +1,125 @@
-import { NextResponse } from "next/server"
-import { z } from "zod"
-import { getServerSession } from "next-auth"
-import { authOptions } from "@/lib/auth"
-import { prisma } from "@/lib/prisma"
-import {
-  buildExitStrategyDetails,
-  parseExcludedCoinSymbols,
-  serializeExcludedCoinSymbols,
-} from "@/services/exit-strategy.service"
-import { getOpenSpotHoldings } from "@/services/portfolio-holdings.service"
+import { NextResponse } from "next/server";
+import { z } from "zod";
+import { getServerSession } from "next-auth";
+import { authOptions } from "@/lib/auth";
+import { prisma } from "@/lib/prisma";
+import { buildExitStrategySummary } from "@/services/exit-strategy.service";
 
-export const dynamic = "force-dynamic"
+export const dynamic = "force-dynamic";
 
-const UpdateBody = z.object({
-  strategyType: z.literal("percentage"),
-  sellPercent: z.number().positive().max(100),
-  gainPercent: z.number().positive().max(10_000),
-})
+const CreateBody = z.union([
+  z.object({
+    allCoins: z.literal(true),
+    strategyType: z.literal("percentage"),
+    sellPercent: z.number().positive().max(100),
+    gainPercent: z.number().positive().max(10_000),
+  }),
+  z.object({
+    allCoins: z.literal(false),
+    coinSymbols: z.array(z.string().min(1)).min(1),
+    strategyType: z.literal("percentage"),
+    sellPercent: z.number().positive().max(100),
+    gainPercent: z.number().positive().max(10_000),
+    startingQuantity: z.number().nonnegative().optional(),
+  }),
+]);
 
-export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET() {
   try {
-    const { id } = await params
+    const session = await getServerSession(authOptions);
+    if (!session?.accountId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const session = await getServerSession(authOptions)
-    if (!session?.accountId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const accountId = session.accountId;
 
-    const data = await buildExitStrategyDetails(session.accountId, id, 10)
-    return NextResponse.json({ data })
+    const list = await prisma.exit_strategy.findMany({
+      where: { account_id: accountId },
+      orderBy: { created_at: "desc" },
+      select: { id: true },
+    });
+
+    const data = await Promise.all(
+      list.map((s) => buildExitStrategySummary(accountId, s.id)),
+    );
+    return NextResponse.json({ data });
   } catch (e) {
-    console.error("[GET /api/exit-strategies/[id]] error:", e)
-    return NextResponse.json({ error: "Internal error" }, { status: 500 })
+    console.error("[GET /api/exit-strategies] error:", e);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }
 
-export async function PUT(req: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function POST(req: Request) {
   try {
-    const { id } = await params
+    const session = await getServerSession(authOptions);
+    if (!session?.accountId)
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
-    const session = await getServerSession(authOptions)
-    if (!session?.accountId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    const accountId = session.accountId;
+    const body = CreateBody.parse(await req.json());
 
-    const body = UpdateBody.parse(await req.json())
+    if (body.allCoins === true) {
+      const created = await prisma.exit_strategy.create({
+        data: {
+          account_id: accountId,
+          coin_symbol: "",
+          is_all_coins: true,
+          strategy_type: "percentage",
+          sell_percent: body.sellPercent,
+          gain_percent: body.gainPercent,
+          starting_quantity: null,
+          is_active: true,
+        },
+        select: { id: true },
+      });
 
-    const existing = await prisma.exit_strategy.findFirst({
-      where: { id, account_id: session.accountId },
-      select: { id: true },
-    })
-    if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 })
+      const summary = await buildExitStrategySummary(accountId, created.id);
+      return NextResponse.json({ data: [summary] }, { status: 201 });
+    }
 
-    await prisma.exit_strategy.update({
-      where: { id },
-      data: {
-        strategy_type: body.strategyType,
-        sell_percent: body.sellPercent,
-        gain_percent: body.gainPercent,
-      },
-    })
+    const coins = body.coinSymbols.map((c) => c.trim().toUpperCase());
 
-    const data = await buildExitStrategyDetails(session.accountId, id, 10)
-    return NextResponse.json({ data })
+    const created = await prisma.$transaction(
+      coins.map((coin) =>
+        prisma.exit_strategy.create({
+          data: {
+            account_id: accountId,
+            coin_symbol: coin,
+            is_all_coins: false,
+            strategy_type: "percentage",
+            sell_percent: body.sellPercent,
+            gain_percent: body.gainPercent,
+            starting_quantity: body.startingQuantity ?? null,
+            is_active: true,
+          },
+          select: { id: true },
+        }),
+      ),
+    );
+
+    const data = await Promise.all(
+      created.map((s) => buildExitStrategySummary(accountId, s.id)),
+    );
+    return NextResponse.json({ data }, { status: 201 });
   } catch (err: unknown) {
     if (err instanceof z.ZodError)
-      return NextResponse.json({ error: err.flatten() }, { status: 400 })
-    console.error("[PUT /api/exit-strategies/[id]] error:", err)
-    return NextResponse.json({ error: "Internal error" }, { status: 500 })
-  }
-}
+      return NextResponse.json({ error: err.flatten() }, { status: 400 });
 
-export async function DELETE(req: Request, { params }: { params: Promise<{ id: string }> }) {
-  try {
-    const { id } = await params
-    const coinSymbolParam = new URL(req.url).searchParams.get("coinSymbol")
-    const coinSymbol = coinSymbolParam?.trim().toUpperCase() || null
-
-    const session = await getServerSession(authOptions)
-    if (!session?.accountId) return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
-
-    const accountId = session.accountId
-
-    const row = await prisma.exit_strategy.findFirst({
-      where: { id, account_id: accountId },
-      select: {
-        id: true,
-        coin_symbol: true,
-        is_all_coins: true,
-        excluded_coin_symbols_json: true,
-        strategy_type: true,
-        sell_percent: true,
-        gain_percent: true,
-        is_active: true,
-      },
-    })
-    if (!row) return NextResponse.json({ error: "Not found" }, { status: 404 })
-
-    if (!coinSymbol) {
-      await prisma.exit_strategy.delete({ where: { id } })
-      return new Response(null, { status: 204 })
+    if (
+      typeof err === "object" &&
+      err !== null &&
+      "code" in err &&
+      err.code === "P2002"
+    ) {
+      return NextResponse.json(
+        {
+          error:
+            "An exit strategy already exists for one or more of the selected assets.",
+        },
+        { status: 409 },
+      );
     }
 
-    if (!row.is_all_coins) {
-      if (row.coin_symbol.trim().toUpperCase() !== coinSymbol) {
-        return NextResponse.json({ error: "Asset not found in plan" }, { status: 404 })
-      }
-
-      await prisma.exit_strategy.delete({ where: { id } })
-      return new Response(null, { status: 204 })
-    }
-
-    const holdings = await getOpenSpotHoldings(accountId)
-    const excludedCoins = new Set(
-      parseExcludedCoinSymbols(row.excluded_coin_symbols_json),
-    )
-    const planCoins = Array.from(
-      new Set(
-        holdings
-          .map((holding) => holding.symbol.trim().toUpperCase())
-          .filter((holdingCoin) => holdingCoin && !excludedCoins.has(holdingCoin)),
-      ),
-    ).sort((a, b) => a.localeCompare(b))
-
-    if (!planCoins.includes(coinSymbol)) {
-      return NextResponse.json({ error: "Asset not found in plan" }, { status: 404 })
-    }
-
-    const nextExcludedCoins = [...excludedCoins, coinSymbol]
-
-    if (planCoins.length === 1) {
-      await prisma.exit_strategy.delete({ where: { id } })
-      return new Response(null, { status: 204 })
-    }
-
-    await prisma.exit_strategy.update({
-      where: { id },
-      data: {
-        excluded_coin_symbols_json: serializeExcludedCoinSymbols(nextExcludedCoins),
-      },
-    })
-
-    return new Response(null, { status: 204 })
-  } catch (e) {
-    console.error("[DELETE /api/exit-strategies/[id]] error:", e)
-    return NextResponse.json({ error: "Internal error" }, { status: 500 })
+    console.error("[POST /api/exit-strategies] error:", err);
+    return NextResponse.json({ error: "Internal error" }, { status: 500 });
   }
 }

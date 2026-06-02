@@ -457,6 +457,7 @@ export default function AddTransactionModal(props: {
                         setPriceRaw("");
                         setAmountRaw("");
                         setTotalRaw("");
+                        setFeeRaw("0");
                         lastEdited.current = null;
                         await loadMarketPrice(a.id);
                       }}
@@ -497,6 +498,7 @@ export default function AddTransactionModal(props: {
                         setPriceRaw("");
                         setAmountRaw("");
                         setTotalRaw("");
+                        setFeeRaw("0");
                         lastEdited.current = null;
                         await loadMarketPrice(a.id);
                       }}
@@ -643,6 +645,7 @@ export default function AddTransactionModal(props: {
                   setSelected(null);
                   setAmountRaw("");
                   setTotalRaw("");
+                  setFeeRaw("0");
                   setPriceRaw("");
                   lastEdited.current = null;
                 }}

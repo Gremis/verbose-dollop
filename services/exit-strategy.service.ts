@@ -40,6 +40,7 @@ export type ExitStrategySummary = {
   assets: ExitStrategyAssetSummary[];
   totalAssets: number;
   totalProfitUsd: number;
+  realizedGainUsd: number;
 };
 
 export type ExitStrategyStepRow = {
@@ -283,6 +284,15 @@ export async function buildExitStrategySummary(
     .filter((a) => a.status === "ready")
     .reduce((sum, a) => sum + a.usdValueToSell, 0);
 
+  const realizedGainRows = await prisma.exit_strategy_execution.findMany({
+    where: { exit_strategy_id: s.id },
+    select: { realized_profit: true },
+  });
+  const realizedGainUsd = realizedGainRows.reduce(
+    (sum, row) => sum + Number(row.realized_profit ?? 0),
+    0,
+  );
+
   return {
     id: s.id,
     isAllCoins: s.is_all_coins,
@@ -295,6 +305,7 @@ export async function buildExitStrategySummary(
     assets,
     totalAssets: assets.length,
     totalProfitUsd: round(totalProfitUsd, 2),
+    realizedGainUsd: round(realizedGainUsd, 2),
   };
 }
 

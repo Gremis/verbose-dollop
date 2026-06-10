@@ -38,6 +38,12 @@ function buildRangeQS(start: string, end: string) {
   }).toString()
 }
 
+function randomTagColor() {
+  return `#${Math.floor(Math.random() * 0xffffff)
+    .toString(16)
+    .padStart(6, "0")}`.toUpperCase()
+}
+
 export default function ManageTagsClient() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -132,7 +138,7 @@ export default function ManageTagsClient() {
   function openCreate() {
     setMode("create")
     setEditingId(null)
-    reset({ name: "", description: "", color: "#7C3AED" })
+    reset({ name: "", description: "", color: randomTagColor() })
     setOpen(true)
   }
 
@@ -437,7 +443,7 @@ export default function ManageTagsClient() {
             <div className="mb-1 text-sm">
               Tag Color <span className="text-red-600">*</span>
             </div>
-            <div className="flex items-center gap-3">
+            <div className="grid gap-3">
               <input
                 type="color"
                 value={color}
@@ -450,19 +456,22 @@ export default function ManageTagsClient() {
                 className="h-10 w-14 rounded-xl border border-gray-200 bg-white p-1"
               />
               <input
+                type="hidden"
                 {...register("color", {
                   required: "Tag Color is required",
                   pattern: {
                     value: /^#[0-9A-Fa-f]{6}$/,
-                    message: "Use a valid hex color",
+                    message: "Use a valid color",
                   },
                 })}
-                className="w-32 rounded-xl border border-gray-200 px-3 py-2 font-mono text-sm outline-none focus:ring-2 focus:ring-primary/30"
               />
-              <span
-                className="h-8 w-8 rounded-full border border-gray-200"
-                style={{ backgroundColor: color }}
-              />
+              <div className="flex items-center gap-3">
+                <span
+                  className="h-8 w-8 rounded-full border border-gray-200"
+                  style={{ backgroundColor: color }}
+                />
+                <span className="font-mono text-sm text-gray-600">{color.toUpperCase()}</span>
+              </div>
             </div>
             {errors.color && (
               <div className="mt-1 text-xs text-red-600">

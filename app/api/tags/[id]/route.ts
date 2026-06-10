@@ -41,17 +41,23 @@ export async function PUT(
     return NextResponse.json({ error: "Not found" }, { status: 404 })
   }
 
+  const name = parsed.data.name.trim()
+  if (!name) {
+    return NextResponse.json({ error: "Name is required" }, { status: 400 })
+  }
+
   try {
-    await prisma.tag.update({
+    const updated = await prisma.tag.update({
       where: { id },
       data: {
-        name: parsed.data.name.trim(),
+        name,
         description: (parsed.data.description ?? "").trim() || null,
         color: parsed.data.color,
       },
+      select: { id: true, name: true, description: true, color: true },
     })
 
-    return NextResponse.json({ ok: true })
+    return NextResponse.json(updated)
   } catch (err: unknown) {
     if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
       return NextResponse.json(

@@ -178,7 +178,7 @@ function toNum(input: string | number | null | undefined): number {
 const money2 = (n: number) => `$${n.toFixed(3)}`;
 
 type BasePayload = {
-  strategy_id: string;
+  strategy_id?: string;
   asset_name: string;
   trade_datetime: string;
   side: Side;
@@ -356,6 +356,7 @@ function JournalsPageContent() {
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [addNotes, setAddNotes] = useState(false);
 
   const [assetQuery, setAssetQuery] = useState<string>("");
   const [assetOptions, setAssetOptions] = useState<AssetOption[]>([]);
@@ -808,6 +809,7 @@ function JournalsPageContent() {
     setMode("create");
     setEditingId(null);
     setWizardStep(1);
+    setAddNotes(false);
 
     validSymbolsRef.current = new Set();
     setAssetQuery("");
@@ -837,6 +839,7 @@ function JournalsPageContent() {
     setMode("edit");
     setEditingId(row.id);
     setWizardStep(1);
+    setAddNotes(Boolean(row.notes_entry || row.notes_review));
 
     validSymbolsRef.current = new Set([row.asset_name.toUpperCase()]);
     setAssetQuery(row.asset_name);
@@ -950,7 +953,6 @@ function JournalsPageContent() {
   async function validateAndNext() {
     if (wizardStep === 1) {
       const ok = await trigger([
-        "strategy_id",
         "asset_name",
         "trade_type",
         "trade_datetime",
@@ -966,7 +968,7 @@ function JournalsPageContent() {
           "entry_price",
           "trading_fee",
         ]);
-        if (ok) setWizardStep(3);
+        if (ok) await handleSubmit(onSubmit)();
       } else {
         const ok = await trigger([
           "amount_spent",
@@ -975,7 +977,7 @@ function JournalsPageContent() {
           "status",
           "side",
         ]);
-        if (ok) setWizardStep(3);
+        if (ok) await handleSubmit(onSubmit)();
       }
       return;
     }
@@ -983,7 +985,7 @@ function JournalsPageContent() {
 
   async function submitFinal(form: JournalForm) {
     const tradeType = Number(form.trade_type) as TradeType;
-    const ruleCount = (form.matched_rule_ids ?? []).length;
+    const ruleCount = 0;
 
     let coercedSide: Side = (form.side ?? "buy") as Side;
     coercedSide =
@@ -1034,7 +1036,7 @@ function JournalsPageContent() {
     );
 
     const base: BasePayload = {
-      strategy_id: form.strategy_id,
+      strategy_id: form.strategy_id || undefined,
       asset_name: form.asset_name,
       trade_datetime: toISO(form.trade_datetime),
       side: coercedSide,
@@ -1044,8 +1046,8 @@ function JournalsPageContent() {
       exit_price: exit,
       stop_loss_price: sl,
       strategy_rule_match: ruleCount,
-      notes_entry: form.notes_entry?.trim() || null,
-      notes_review: form.notes_review?.trim() || null,
+      notes_entry: addNotes ? form.notes_entry?.trim() || null : null,
+      notes_review: addNotes ? form.notes_review?.trim() || null : null,
       trading_fee: fee,
       tags: tagNames,
     };
@@ -1432,6 +1434,104 @@ function JournalsPageContent() {
     }
   }
 
+  function renderTagsSection() {
+    return (
+      <div>
+        <div className="text-sm mb-1">Tags (Optional)</div>
+        <div className="flex flex-col gap-2 sm:flex-row">
+          <input
+            type="text"
+            value={newTagName}
+            onChange={(e) => setNewTagName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void createPendingTag();
+              }
+            }}
+            placeholder="Tag name"
+            className="flex-1 rounded-xl border border-gray-200 px-3 py-2 text-sm"
+          />
+          <div className="flex gap-2">
+            <input
+              type="color"
+              value={newTagColor}
+              onChange={(e) => setNewTagColor(e.target.value)}
+              className="h-10 w-12 rounded-xl border border-gray-200 bg-white p-1"
+              title="Tag color"
+            />
+            <button
+              type="button"
+              onClick={() => void createPendingTag()}
+              className="rounded-xl bg-[#2563EB] px-3 py-2 text-sm font-semibold text-white hover:bg-[#1D4ED8]"
+            >
+              Add Tag
+            </button>
+          </div>
+        </div>
+        {tagsError && <p className="mt-1 text-xs text-red-600">{tagsError}</p>}
+        {wTags.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {wTags.map((t: string) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => {
+                  const updated = wTags.filter((x: string) => x !== t);
+                  setValue("tags", updated, { shouldDirty: true });
+                }}
+                className="inline-flex items-center gap-1.5 rounded-full bg-gray-100 px-3 py-1 text-xs text-gray-700 hover:bg-gray-200"
+              >
+                <span
+                  className="h-2 w-2 rounded-full"
+                  style={{
+                    backgroundColor:
+                      availableTags.find((tag) => tag.name === t)?.color ??
+                      "#9CA3AF",
+                  }}
+                />
+                <span>{t}</span>
+                <span className="text-gray-500">x</span>
+              </button>
+            ))}
+          </div>
+        )}
+        <div className="mt-3">
+          <div className="text-xs text-gray-500 mb-1">
+            Existing tags
+            {tagsLoading && " (loading...)"}
+          </div>
+          <div className="flex flex-wrap gap-2">
+            {availableTags.length === 0 && !tagsLoading && (
+              <span className="text-xs text-gray-400">
+                No tags yet. Create one above.
+              </span>
+            )}
+            {availableTags
+              .filter((t) => !wTags.includes(t.name))
+              .map((tag) => (
+                <button
+                  type="button"
+                  key={tag.id}
+                  onClick={() => {
+                    const updated = [...wTags, tag.name];
+                    setValue("tags", updated, { shouldDirty: true });
+                  }}
+                  className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 px-3 py-1 text-xs hover:bg-gray-50"
+                >
+                  <span
+                    className="h-2 w-2 rounded-full"
+                    style={{ backgroundColor: tag.color ?? "#9CA3AF" }}
+                  />
+                  {tag.name}
+                </button>
+              ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="grid gap-6">
       <JournalToolbar
@@ -1509,7 +1609,7 @@ function JournalsPageContent() {
               {wizardStep > 1 && (
                 <button
                   className="rounded-xl bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200"
-                  onClick={() => setWizardStep((s) => (s === 2 ? 1 : 2))}
+                  onClick={() => setWizardStep(1)}
                 >
                   Back
                 </button>
@@ -1522,7 +1622,7 @@ function JournalsPageContent() {
               >
                 Cancel
               </button>
-              {wizardStep < 3 ? (
+              {wizardStep < 2 ? (
                 <button
                   className="rounded-xl bg-green-600 text-white px-4 py-2 text-sm hover:opacity-90"
                   onClick={() => void validateAndNext()}
@@ -1531,7 +1631,7 @@ function JournalsPageContent() {
                 </button>
               ) : (
                 <button
-                  onClick={handleSubmit(onSubmit)}
+                  onClick={() => void validateAndNext()}
                   disabled={isSubmitting}
                   className="rounded-xl bg-green-600 text-white px-4 py-2 text-sm hover:opacity-90 disabled:opacity-50"
                 >
@@ -1546,30 +1646,6 @@ function JournalsPageContent() {
           <form className="grid gap-4" onSubmit={() => {}}>
             {wizardStep === 1 && (
               <>
-                <div>
-                  <div className="text-sm mb-1">
-                    Strategy Used <span className="text-red-600">*</span>
-                  </div>
-                  <select
-                    {...register("strategy_id", {
-                      required: "Strategy is required",
-                    })}
-                    className="w-full rounded-xl border border-gray-200 px-3 py-2"
-                  >
-                    <option value="">Select a strategy…</option>
-                    {strategies.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.name || "Untitled"}
-                      </option>
-                    ))}
-                  </select>
-                  {errors.strategy_id && (
-                    <p className="mt-1 text-xs text-red-600">
-                      {String(errors.strategy_id.message)}
-                    </p>
-                  )}
-                </div>
-
                 <div>
                   <div className="text-sm mb-1">
                     Asset <span className="text-red-600">*</span>
@@ -1680,6 +1756,8 @@ function JournalsPageContent() {
                     </p>
                   )}
                 </div>
+                <hr className="my-2 border-gray-200" />
+                {renderTagsSection()}
               </>
             )}
 
@@ -1984,9 +2062,47 @@ function JournalsPageContent() {
                     </div>
                   </>
                 )}
+
+                <label className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm">
+                  <input
+                    type="checkbox"
+                    checked={addNotes}
+                    onChange={(e) => setAddNotes(e.target.checked)}
+                    className="h-4 w-4 rounded border-gray-300"
+                  />
+                  Add Notes
+                </label>
+
+                {addNotes && (
+                  <div className="grid gap-4">
+                    <div>
+                      <div className="text-sm mb-1">Notes (Optional)</div>
+                      <textarea
+                        {...register("notes_entry")}
+                        rows={3}
+                        placeholder="Write any notes..."
+                        className="w-full rounded-xl border border-gray-200 px-3 py-2"
+                      />
+                    </div>
+
+                    {(wStatus === "loss" || wStatus === "break_even") && (
+                      <div>
+                        <div className="text-sm mb-1">
+                          Post Loss Review (Optional)
+                        </div>
+                        <textarea
+                          {...register("notes_review")}
+                          rows={3}
+                          placeholder="Reflect on what went wrong..."
+                          className="w-full rounded-xl border border-gray-200 px-3 py-2"
+                        />
+                      </div>
+                    )}
+                  </div>
+                )}
               </>
             )}
-            {wizardStep === 3 && (
+            {false && wizardStep === 3 && (
               <>
                 <div>
                   <div className="text-sm mb-2">

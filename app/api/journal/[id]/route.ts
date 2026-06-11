@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma"
 import { z } from "zod"
 import { getActiveAccountId } from "@/lib/account"
 import { Prisma } from "@prisma/client"
+import { getDefaultStrategyId } from "@/lib/trade-helpers"
 
 type Status = "in_progress" | "win" | "loss" | "break_even"
 
@@ -118,7 +119,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
   })
   if (!existing) return NextResponse.json({ error: "Not found" }, { status: 404 })
 
-  const strategyId = data.strategy_id ?? existing.strategy_id
+  const strategyId = data.strategy_id ?? (await getDefaultStrategyId(accountId))
   const okStrategy = await prisma.strategy.findFirst({
     where: { id: strategyId, account_id: accountId },
     select: { id: true },

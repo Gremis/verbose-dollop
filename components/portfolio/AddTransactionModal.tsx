@@ -635,7 +635,7 @@ export default function AddTransactionModal(props: {
                 <MoneyInputStandalone
                   valueRaw={feeRaw}
                   onChangeRaw={setFeeRaw}
-                  maxDecimals={3}
+                  maxDecimals={8}
                   placeholder="0"
                   className="w-full rounded-xl border border-gray-200 bg-white px-3 py-2"
                 />

@@ -121,7 +121,7 @@ export async function POST(req: Request) {
       select: { id: true },
     })
 
-    if (input.isStablecoin != null) {
+    if (input.isStablecoin != null && !existingHolding) {
       await setPortfolioAssetStablecoin({
         accountId: session.accountId,
         symbol,

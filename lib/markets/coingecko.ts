@@ -24,8 +24,8 @@ export type CgMarketCoin = {
   image: string | null
   current_price: number | null
   price_change_percentage_24h: number | null
-  market_cap: number | null
   market_cap_rank: number | null
+  market_cap?: number | null
 }
 
 export type CgSearchItem = {
@@ -353,8 +353,8 @@ export async function cgTopByMarketCap(limit = 6): Promise<CgMarketCoin[]> {
 
     const currentPrice = toNumberSafe(item.current_price)
     const pct24 = toNumberSafe(item.price_change_percentage_24h)
-    const marketCap = toNumberSafe(item.market_cap)
     const rank = toNumberSafe(item.market_cap_rank)
+    const marketCap = toNumberSafe(item.market_cap)
 
     if (!id || !symbol) continue
 
@@ -365,8 +365,8 @@ export async function cgTopByMarketCap(limit = 6): Promise<CgMarketCoin[]> {
       image,
       current_price: currentPrice,
       price_change_percentage_24h: pct24,
-      market_cap: marketCap,
       market_cap_rank: rank,
+      market_cap: marketCap,
     })
   }
 
@@ -376,20 +376,19 @@ export async function cgTopByMarketCap(limit = 6): Promise<CgMarketCoin[]> {
 }
 
 export async function cgMarketsByIds(ids: string[]): Promise<CgMarketCoin[]> {
-  const normalizedIds = Array.from(
+  const coinIds = Array.from(
     new Set(ids.map((id) => normalizeIdCandidate(id)).filter(Boolean)),
-  ).sort((a, b) => a.localeCompare(b))
+  )
+  if (!coinIds.length) return []
 
-  if (!normalizedIds.length) return []
-
-  const cacheKey = `cg:markets:${normalizedIds.join(",")}`
+  const cacheKey = `cg:markets:${coinIds.slice().sort().join(",")}`
   const cached = getCache<CgMarketCoin[]>(cacheKey)
   if (cached) return cached
 
   const url =
     `${baseUrl()}/coins/markets` +
-    `?vs_currency=usd&ids=${encodeURIComponent(normalizedIds.join(","))}` +
-    `&order=market_cap_desc&per_page=${clampInt(normalizedIds.length, 1, 250)}&page=1&sparkline=false` +
+    `?vs_currency=usd&ids=${encodeURIComponent(coinIds.join(","))}` +
+    `&order=market_cap_desc&per_page=${clampInt(coinIds.length, 1, 250)}&page=1&sparkline=false` +
     `&price_change_percentage=24h`
 
   const res = await cgFetch(url)
@@ -407,10 +406,11 @@ export async function cgMarketsByIds(ids: string[]): Promise<CgMarketCoin[]> {
     const symbol = toStringSafe(item.symbol) ?? ""
     const name = toStringSafe(item.name) ?? ""
     const image = toStringSafe(item.image) ?? null
+
     const currentPrice = toNumberSafe(item.current_price)
     const pct24 = toNumberSafe(item.price_change_percentage_24h)
-    const marketCap = toNumberSafe(item.market_cap)
     const rank = toNumberSafe(item.market_cap_rank)
+    const marketCap = toNumberSafe(item.market_cap)
 
     if (!id || !symbol) continue
 
@@ -421,8 +421,8 @@ export async function cgMarketsByIds(ids: string[]): Promise<CgMarketCoin[]> {
       image,
       current_price: currentPrice,
       price_change_percentage_24h: pct24,
-      market_cap: marketCap,
       market_cap_rank: rank,
+      market_cap: marketCap,
     })
   }
 

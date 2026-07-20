@@ -32,11 +32,11 @@ describe("Portfolio transaction UI", () => {
     );
   });
 
-  it("does not show the trading fee below the total", () => {
+  it("shows the trading fee below the total in the transaction table", () => {
     render(<TransactionsTable rows={[tx({ feeUsd: 2.5, totalUsd: 102.5 })]} />);
 
     expect(screen.getByText("$102.50")).toBeInTheDocument();
-    expect(screen.queryByText("-$2.50 fee")).not.toBeInTheDocument();
+    expect(screen.getByText("-$2.50 fee")).toBeInTheDocument();
   });
 
   it("does not recalculate amount in edit mode when only the fee changes", async () => {
@@ -65,5 +65,30 @@ describe("Portfolio transaction UI", () => {
     expect(amount).toHaveValue("10");
     expect(total).toHaveValue("100");
     expect(screen.queryByText("-$5.00 fee")).not.toBeInTheDocument();
+  });
+
+  it("keeps total as amount times price when a fee is entered before the amount", async () => {
+    const user = userEvent.setup();
+
+    render(
+      <AddTransactionModal
+        open
+        mode="edit"
+        initialTx={tx({ priceUsd: 70.28, qty: 0, totalUsd: 0, feeUsd: 0 })}
+        onClose={vi.fn()}
+        onDone={vi.fn()}
+      />,
+    );
+
+    const amount = screen.getByLabelText("Amount");
+    const total = screen.getByLabelText("Total (USD)");
+    const fee = screen.getByLabelText(/Trading Fee/);
+
+    await user.clear(fee);
+    await user.type(fee, "1");
+    await user.clear(amount);
+    await user.type(amount, "1");
+
+    expect(total).toHaveValue("70.28");
   });
 });

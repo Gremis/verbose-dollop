@@ -13,7 +13,7 @@ import Modal from "@/components/ui/Modal";
 import { MoneyField } from "@/components/form/MaskedFields";
 import JournalToolbar from "@/components/journal/JournalToolbar";
 import JournalSummaryCards from "@/components/journal/JournalSummaryCards";
-import JournalDateRangeCard from "@/components/journal/JournalDateRangeCard";
+import JournalFilterBar from "@/components/journal/JournalFilterBar";
 import JournalTradesCard from "@/components/journal/JournalTradesCard";
 import ExportModal from "@/components/journal/ExportModal";
 import DeleteEntryModal from "@/components/journal/DeleteEntryModal";
@@ -21,6 +21,7 @@ import QuickCloseModal from "@/components/journal/QuickCloseModal";
 import FirstRunJournalModal from "@/components/journal/FirstRunJournalModal";
 import JournalFooter from "@/components/journal/JournalFooter";
 import ManageJournalsModal from "@/components/journal/ManageJournalsModal";
+import { calcProfitFactor, profitFactorLabel } from "@/lib/trade-helpers";
 
 type TradeType = 1 | 2;
 type Status = "in_progress" | "win" | "loss" | "break_even";
@@ -36,6 +37,7 @@ export type JournalRow = {
   exit_price: number | null;
   amount_spent: number;
   date: string | Date;
+  closed_at: string | Date | null;
   strategy_id: string;
   pnl: number | null;
   trading_fee: number;
@@ -146,7 +148,7 @@ function toNum(input: string | number | null | undefined): number {
   return parseDecimal(input ?? "");
 }
 
-const money2 = (n: number) => `$${n.toFixed(3)}`;
+const money2 = (n: number) => `$${n.toFixed(2)}`;
 const DEFAULT_NEW_TAG_COLOR = "#7C3AED";
 
 type BasePayload = {
@@ -188,11 +190,13 @@ export default function JournalPage() {
 
   const [movedOutBanner, setMovedOutBanner] = useState<string | null>(null);
 
-  const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"new" | "az" | "za" | "tag_az" | "tag_za">("new");
-  const [showFilter, setShowFilter] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
+
+  const [assetFilter, setAssetFilter] = useState("");
+  const [directionFilter, setDirectionFilter] = useState<"all" | "long" | "short">("all");
+  const [statusSegment, setStatusSegment] = useState<"all" | "open" | "wins" | "losses">("all");
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"create" | "edit">("create");
@@ -490,6 +494,7 @@ useEffect(() => {
       exit_price: it.exit_price == null ? null : Number(it.exit_price),
       amount_spent: Number(it.amount_spent),
       date: it.date,
+      closed_at: it.closed_at ?? null,
       strategy_id: it.strategy_id,
       pnl: it.pnl == null ? null : Number(it.pnl),
       stop_loss_price:
@@ -588,6 +593,25 @@ useEffect(() => {
     } catch {}
   }, []);
 
+  function handleStartChange(value: string) {
+    setStart(value);
+    try {
+      localStorage.setItem("jrnl.range", JSON.stringify({ start: value, end }));
+    } catch {}
+  }
+
+  function handleEndChange(value: string) {
+    setEnd(value);
+    try {
+      localStorage.setItem("jrnl.range", JSON.stringify({ start, end: value }));
+    } catch {}
+  }
+
+  const assetNameOptions = useMemo(
+    () => Array.from(new Set(items.map((i) => i.asset_name))).sort(),
+    [items],
+  );
+
   const rows = useMemo(() => {
     let arr = items;
     const q = query.trim().toLowerCase();
@@ -599,6 +623,22 @@ useEffect(() => {
       );
     if (selectedTagName) {
       arr = arr.filter((i) => (i.tags ?? []).includes(selectedTagName));
+    }
+    if (assetFilter) {
+      arr = arr.filter((i) => i.asset_name === assetFilter);
+    }
+    if (directionFilter !== "all") {
+      const longSides = ["buy", "long"];
+      arr = arr.filter(
+        (i) => (longSides.includes(i.side) ? "long" : "short") === directionFilter,
+      );
+    }
+    if (statusSegment === "open") {
+      arr = arr.filter((i) => i.status === "in_progress");
+    } else if (statusSegment === "wins") {
+      arr = arr.filter((i) => i.status === "win");
+    } else if (statusSegment === "losses") {
+      arr = arr.filter((i) => i.status === "loss");
     }
     switch (sort) {
       case "az":
@@ -620,7 +660,15 @@ useEffect(() => {
       default:
         return [...arr].sort((a, b) => +new Date(b.date) - +new Date(a.date));
     }
-  }, [items, query, sort, selectedTagName]);
+  }, [
+    items,
+    query,
+    sort,
+    selectedTagName,
+    assetFilter,
+    directionFilter,
+    statusSegment,
+  ]);
 
   function openCreate() {
     setMode("create");
@@ -947,53 +995,37 @@ async function fetchAssets(q: string) {
 
   const totalTrades = rows.length;
   const finished = rows.filter((r) => r.status !== "in_progress");
+  const winCount = finished.filter((r) => r.status === "win").length;
+  const lossCount = finished.filter((r) => r.status === "loss").length;
+  const openCount = rows.length - finished.length;
   const winRate = finished.length
-    ? Math.round(
-        (finished.filter((i) => i.status === "win").length * 100) /
-          finished.length
-      )
+    ? Math.round((winCount * 100) / finished.length)
     : 0;
 
-  const earnings = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
+  const netPnl = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
+  const profitFactor = calcProfitFactor(finished.map((r) => r.pnl));
+  const pfLabel = profitFactorLabel(profitFactor);
+  const avgPositionSize = rows.length
+    ? rows.reduce((acc, r) => acc + r.amount_spent, 0) / rows.length
+    : 0;
 
   function renderStatusButton(r: JournalRow) {
-    if (r.status === "in_progress") {
-      return (
-        <button
-          title="Close Trade"
-          onClick={() => openCloseModal(r)}
-          className="px-2 py-1 rounded bg-red-600 text-white text-xs hover:bg-red-700"
-        >
-          Close Trade
-        </button>
-      );
-    }
-
-    const label = r.status.replace(/_/g, " ");
-    const formatted =
-      label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
-
-    let bg = "bg-green-500";
-    let hover = "hover:bg-green-700";
-    let text = "text-white";
-
-    if (r.status === "loss") {
-      bg = "bg-orange-600";
-      hover = "hover:bg-orange-700";
-    } else if (r.status === "break_even") {
-      bg = "bg-gray-200";
-      hover = "hover:bg-gray-300";
-      text = "text-gray-700";
-    }
+    const config =
+      r.status === "in_progress"
+        ? { label: "Open", className: "text-amber-700 bg-amber-50" }
+        : r.status === "win"
+          ? { label: "Win", className: "text-emerald-700 bg-emerald-50" }
+          : r.status === "loss"
+            ? { label: "Loss", className: "text-red-700 bg-red-50" }
+            : { label: "Break even", className: "text-gray-600 bg-gray-100" };
 
     return (
-      <button
-        title={formatted}
-        onClick={() => {}}
-        className={`px-2 py-1 rounded ${bg} ${text} text-xs ${hover}`}
+      <span
+        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold ${config.className}`}
       >
-        {formatted}
-      </button>
+        <span className="h-[7px] w-[7px] rounded-full bg-current" />
+        {config.label}
+      </span>
     );
   }
 
@@ -1441,52 +1473,47 @@ async function fetchAssets(q: string) {
       <JournalSummaryCards
         totalTrades={totalTrades}
         winRate={winRate}
-        earnings={earnings}
+        winCount={winCount}
+        lossCount={lossCount}
+        openCount={openCount}
+        netPnl={netPnl}
+        profitFactor={profitFactor}
+        profitFactorLabel={pfLabel}
+        avgPositionSize={avgPositionSize}
       />
 
-      <JournalDateRangeCard
+      <JournalFilterBar
+        query={query}
+        onQueryChange={setQuery}
         start={start}
         end={end}
-        onStartChange={setStart}
-        onEndChange={setEnd}
-        onApply={() => {
-          try {
-            localStorage.setItem("jrnl.range", JSON.stringify({ start, end }));
-          } catch {}
-          void load();
-        }}
-        onReset={resetToLast6Months}
+        onStartChange={handleStartChange}
+        onEndChange={handleEndChange}
+        assetOptions={assetNameOptions}
+        assetFilter={assetFilter}
+        onAssetFilterChange={setAssetFilter}
+        directionFilter={directionFilter}
+        onDirectionFilterChange={setDirectionFilter}
+        statusSegment={statusSegment}
+        onStatusSegmentChange={setStatusSegment}
       />
 
       <JournalTradesCard
         loading={loading}
         error={error}
         rows={rows}
-        showSearch={showSearch}
-        query={query}
-        showFilter={showFilter}
         showMenu={showMenu}
         availableTags={availableTags}
         selectedTagName={selectedTagName}
         expandedRowId={expandedRowId}
-        onToggleSearch={() => setShowSearch((s) => !s)}
-        onCloseSearch={() => setShowSearch(false)}
-        onQueryChange={setQuery}
-        onToggleFilter={() => {
-          setShowFilter((f) => !f);
-          setShowMenu(false);
-        }}
-        onCloseFilter={() => setShowFilter(false)}
-        onToggleMenu={() => {
-          setShowMenu((m) => !m);
-          setShowFilter(false);
-        }}
+        onToggleMenu={() => setShowMenu((m) => !m)}
         onCloseMenu={() => setShowMenu(false)}
         onSortChange={setSort}
         onSelectedTagChange={setSelectedTagName}
         onRefresh={() => {
           void load();
         }}
+        onResetRange={resetToLast6Months}
         onToggleRow={toggleRow}
         onOpenCloseModal={openCloseModal}
         onOpenEdit={openEdit}

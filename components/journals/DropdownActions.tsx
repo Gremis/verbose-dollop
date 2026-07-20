@@ -6,10 +6,12 @@ export default function DropdownActions({
   r,
   openEdit,
   askDelete,
+  onQuickClose,
 }: {
   r: JournalRow;
   openEdit: (r: JournalRow) => void;
   askDelete: (id: string) => void;
+  onQuickClose?: (r: JournalRow) => void;
 }) {
   const [open, setOpen] = useState(false);
   const btnRef = useRef<HTMLButtonElement | null>(null);
@@ -67,13 +69,18 @@ export default function DropdownActions({
       <button
         ref={btnRef}
         type="button"
+        aria-label="Open trade actions"
         onClick={(e) => {
           e.stopPropagation(); // impede trigger do toggleRow no <Tr>
           setOpen((v) => !v);
         }}
-        className="px-2 py-1 rounded bg-gray-200 text-gray-800 text-xs hover:bg-gray-300 cursor-pointer"
+        className="grid h-[34px] w-[34px] place-items-center rounded-[9px] border border-gray-200 bg-white text-gray-500 hover:border-gray-300 hover:bg-gray-50 cursor-pointer"
       >
-        Actions ▼
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+          <circle cx="5" cy="12" r="1" fill="currentColor" />
+          <circle cx="12" cy="12" r="1" fill="currentColor" />
+          <circle cx="19" cy="12" r="1" fill="currentColor" />
+        </svg>
       </button>
 
       {open &&
@@ -85,6 +92,19 @@ export default function DropdownActions({
             className="fixed rounded-xl shadow-lg bg-white ring-1 ring-black/5 z-[9999]"
             onClick={(e) => e.stopPropagation()} // não colapsar a linha ao clicar no menu
           >
+            {onQuickClose && (
+              <button
+                type="button"
+                onClick={() => {
+                  setOpen(false);
+                  onQuickClose(r);
+                }}
+                className="w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-gray-50 cursor-pointer border-b border-gray-100"
+              >
+                Quick Close
+              </button>
+            )}
+
             <button
               type="button"
               onClick={() => {

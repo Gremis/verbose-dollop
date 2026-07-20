@@ -51,6 +51,61 @@ export function calcPnl(input: {
   return Number(net.toFixed(2))
 }
 
+export function calcProfitFactor(pnls: (number | null)[]): number | null {
+  const grossProfit = pnls.reduce(
+    (a: number, p) => a + (p != null && p > 0 ? p : 0),
+    0,
+  )
+  const grossLoss = pnls.reduce(
+    (a: number, p) => a + (p != null && p < 0 ? Math.abs(p) : 0),
+    0,
+  )
+  if (grossProfit === 0 && grossLoss === 0) return null
+  if (grossLoss === 0) return Infinity
+  return grossProfit / grossLoss
+}
+
+export function profitFactorLabel(pf: number | null): "Dangerous" | "Acceptable" | "Optimal" | null {
+  if (pf == null) return null
+  if (pf === Infinity) return "Optimal"
+  if (pf < 1.2) return "Dangerous"
+  if (pf < 1.6) return "Acceptable"
+  return "Optimal"
+}
+
+// endTime = closed_at if closed, else "now" — open trades show elapsed time so far.
+export function formatDuration(openedAt: string | Date, closedAt: string | Date | null): string {
+  const end = closedAt != null ? new Date(closedAt).getTime() : Date.now()
+  const ms = end - new Date(openedAt).getTime()
+  if (!(ms > 0)) return "—"
+  const minutes = Math.floor(ms / 60000)
+  if (minutes < 60) return `${minutes} min`
+  if (minutes < 1440) {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    return m > 0 ? `${h} h ${m} min` : `${h} h`
+  }
+  const days = Math.floor(minutes / 1440)
+  const remH = Math.floor((minutes % 1440) / 60)
+  const dayLabel = `${days} day${days === 1 ? "" : "s"}`
+  return remH > 0 ? `${dayLabel} ${remH} h` : dayLabel
+}
+
+// exitOrTarget is exit_price, which doubles as the take-profit target while a trade is
+// open and becomes the actual exit once closed — there's no separately stored planned
+// target after closing, so this is an approximation for closed trades.
+export function calcRiskReward(
+  entry: number,
+  stopLoss: number | null,
+  exitOrTarget: number | null,
+): string {
+  if (stopLoss == null || exitOrTarget == null) return "—"
+  const risk = Math.abs(entry - stopLoss)
+  if (risk === 0) return "—"
+  const reward = Math.abs(exitOrTarget - entry)
+  return `1:${(reward / risk).toFixed(2)}`
+}
+
 export function calcJournalPnl(input: {
   side: "buy" | "sell" | "long" | "short"
   status: "in_progress" | "win" | "loss" | "break_even"

@@ -136,6 +136,7 @@ export async function GET(req: Request) {
       pnl,
       stop_loss_price:
         r.stop_loss_price != null ? Number(r.stop_loss_price) : null,
+      closed_at: r.closed_at ? r.closed_at.toISOString() : null,
       tags: r.tags.map((jt) => jt.tag.name),
     };
   });
@@ -200,6 +201,8 @@ export async function POST(req: Request) {
     const statusToPersist: Status = data.status as Status;
     const exitToPersist = data.exit_price ?? null;
     const sellFeeToPersist = data.sell_fee ?? 0;
+    const closedAtToPersist: Date | null =
+      statusToPersist !== "in_progress" ? new Date() : null;
 
     const created = await prisma.$transaction(async (tx) => {
       const amountQty = qtyFrom({
@@ -215,6 +218,7 @@ export async function POST(req: Request) {
           trade_type: tradeType,
           asset_name: data.asset_name.toUpperCase(),
           trade_datetime: tradeDate,
+          closed_at: closedAtToPersist,
           side: data.side,
           status: statusToPersist,
           amount_spent: data.amount_spent,

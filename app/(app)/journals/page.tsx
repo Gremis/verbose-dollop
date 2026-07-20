@@ -11,11 +11,12 @@ import React, {
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import Modal from "@/components/ui/Modal";
+import Card from "@/components/ui/Card";
 import { MoneyField } from "@/components/form/MaskedFields";
 import JournalToolbar from "@/components/journal/JournalToolbar";
 import JournalSummaryCards from "@/components/journal/JournalSummaryCards";
-import JournalDateRangeCard from "@/components/journal/JournalDateRangeCard";
 import JournalTradesCard from "@/components/journal/JournalTradesCard";
+import { calcProfitFactor, profitFactorLabel } from "@/lib/trade-helpers";
 import ExportModal from "@/components/journal/ExportModal";
 import DeleteEntryModal from "@/components/journal/DeleteEntryModal";
 import QuickCloseModal from "@/components/journal/QuickCloseModal";
@@ -37,6 +38,7 @@ export type JournalRow = {
   exit_price: number | null;
   amount_spent: number;
   date: string | Date;
+  closed_at: string | Date | null;
   strategy_id: string;
   pnl: number | null;
   trading_fee: number;
@@ -189,7 +191,6 @@ function JournalsPageContent() {
   const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
   const [sort, setSort] = useState<"new" | "az" | "za" | "tag_az" | "tag_za">("new");
-  const [showFilter, setShowFilter] = useState(false);
   const [showMenu, setShowMenu] = useState(false);
 
   const [open, setOpen] = useState(false);
@@ -485,6 +486,7 @@ function JournalsPageContent() {
       exit_price: it.exit_price == null ? null : Number(it.exit_price),
       amount_spent: Number(it.amount_spent),
       date: it.date,
+      closed_at: it.closed_at ?? null,
       strategy_id: it.strategy_id,
       pnl: it.pnl == null ? null : Number(it.pnl),
       stop_loss_price:
@@ -951,14 +953,19 @@ function JournalsPageContent() {
 
   const totalTrades = rows.length;
   const finished = rows.filter((r) => r.status !== "in_progress");
+  const winCount = finished.filter((r) => r.status === "win").length;
+  const lossCount = finished.filter((r) => r.status === "loss").length;
+  const openCount = rows.length - finished.length;
   const winRate = finished.length
-    ? Math.round(
-        (finished.filter((i) => i.status === "win").length * 100) /
-          finished.length,
-      )
+    ? Math.round((winCount * 100) / finished.length)
     : 0;
 
-  const earnings = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
+  const netPnl = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
+  const profitFactor = calcProfitFactor(finished.map((r) => r.pnl));
+  const pfLabel = profitFactorLabel(profitFactor);
+  const avgPositionSize = rows.length
+    ? rows.reduce((acc, r) => acc + r.amount_spent, 0) / rows.length
+    : 0;
 
   function renderStatusButton(r: JournalRow) {
     if (r.status === "in_progress") {
@@ -1359,52 +1366,69 @@ function JournalsPageContent() {
       <JournalSummaryCards
         totalTrades={totalTrades}
         winRate={winRate}
-        earnings={earnings}
+        winCount={winCount}
+        lossCount={lossCount}
+        openCount={openCount}
+        netPnl={netPnl}
+        profitFactor={profitFactor}
+        profitFactorLabel={pfLabel}
+        avgPositionSize={avgPositionSize}
       />
 
-      <JournalDateRangeCard
-        start={start}
-        end={end}
-        onStartChange={setStart}
-        onEndChange={setEnd}
-        onApply={() => {
-          try {
-            localStorage.setItem("jrnl.range", JSON.stringify({ start, end }));
-          } catch {}
-          void load();
-        }}
-        onReset={resetToLast6Months}
-      />
+      <Card>
+        <div className="flex items-center gap-3 flex-wrap">
+          <div className="text-sm text-gray-600">Date range:</div>
+
+          <input
+            type="date"
+            value={start}
+            onChange={(e) => setStart(e.target.value)}
+            className="rounded-xl border border-gray-200 px-3 py-2"
+          />
+          <span className="text-gray-400">—</span>
+          <input
+            type="date"
+            value={end}
+            onChange={(e) => setEnd(e.target.value)}
+            className="rounded-xl border border-gray-200 px-3 py-2"
+          />
+
+          <button
+            className="rounded-xl bg-white px-3 py-2 text-sm border"
+            onClick={() => {
+              try {
+                localStorage.setItem("jrnl.range", JSON.stringify({ start, end }));
+              } catch {}
+              void load();
+            }}
+          >
+            Apply
+          </button>
+          <button
+            className="rounded-xl bg-gray-100 px-3 py-2 text-sm"
+            onClick={resetToLast6Months}
+          >
+            Reset
+          </button>
+        </div>
+      </Card>
 
       <JournalTradesCard
         loading={loading}
         error={error}
         rows={rows}
-        showSearch={showSearch}
-        query={query}
-        showFilter={showFilter}
         showMenu={showMenu}
         availableTags={availableTags}
         selectedTagName={selectedTagName}
         expandedRowId={expandedRowId}
-        onToggleSearch={() => setShowSearch((s) => !s)}
-        onCloseSearch={() => setShowSearch(false)}
-        onQueryChange={setQuery}
-        onToggleFilter={() => {
-          setShowFilter((f) => !f);
-          setShowMenu(false);
-        }}
-        onCloseFilter={() => setShowFilter(false)}
-        onToggleMenu={() => {
-          setShowMenu((m) => !m);
-          setShowFilter(false);
-        }}
+        onToggleMenu={() => setShowMenu((m) => !m)}
         onCloseMenu={() => setShowMenu(false)}
         onSortChange={setSort}
         onSelectedTagChange={setSelectedTagName}
         onRefresh={() => {
           void load();
         }}
+        onResetRange={resetToLast6Months}
         onToggleRow={toggleRow}
         onOpenCloseModal={openCloseModal}
         onOpenEdit={openEdit}

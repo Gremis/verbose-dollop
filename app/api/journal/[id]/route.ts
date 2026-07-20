@@ -140,6 +140,11 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
 
   const statusToPersist: Status = data.status as Status
 
+  const closedAtToPersist: Date | null =
+    statusToPersist === "in_progress"
+      ? null
+      : (existing.closed_at ?? new Date())
+
   const sellFeeToPersist: Prisma.Decimal | undefined =
     data.sell_fee != null ? new Prisma.Decimal(data.sell_fee) : undefined
 
@@ -158,6 +163,7 @@ export async function PUT(req: NextRequest, ctx: { params: Promise<{ id: string 
         trade_type: tradeType,
         asset_name: data.asset_name,
         trade_datetime: new Date(data.trade_datetime),
+        closed_at: closedAtToPersist,
         side: data.side,
         amount_spent: data.amount_spent,
         amount: amountQty,

@@ -11,12 +11,10 @@ import React, {
 import { useSearchParams } from "next/navigation";
 import { useForm } from "react-hook-form";
 import Modal from "@/components/ui/Modal";
-import Card from "@/components/ui/Card";
 import { MoneyField } from "@/components/form/MaskedFields";
 import JournalToolbar from "@/components/journal/JournalToolbar";
 import JournalSummaryCards from "@/components/journal/JournalSummaryCards";
 import JournalTradesCard from "@/components/journal/JournalTradesCard";
-import { calcProfitFactor, profitFactorLabel } from "@/lib/trade-helpers";
 import ExportModal from "@/components/journal/ExportModal";
 import DeleteEntryModal from "@/components/journal/DeleteEntryModal";
 import QuickCloseModal from "@/components/journal/QuickCloseModal";
@@ -27,6 +25,8 @@ import ManageJournalsModal from "@/components/journal/ManageJournalsModal";
 type TradeType = 1 | 2;
 type Status = "in_progress" | "win" | "loss" | "break_even";
 type Side = "buy" | "sell" | "long" | "short";
+type StatusFilter = "all" | "open" | "win" | "loss";
+type DirectionFilter = "all" | "long" | "short";
 
 export type JournalRow = {
   id: string;
@@ -53,6 +53,7 @@ type JournalForm = {
   asset_name: string;
   trade_type: TradeType | string;
   trade_datetime: string;
+  closed_datetime?: string;
 
   trading_fee?: string;
   amount_spent?: string;
@@ -86,6 +87,7 @@ type JournalApiItem = Omit<JournalRow, "trading_fee"> & {
   trading_fee?: number | null;
   buy_fee?: number | null;
   sell_fee?: number | null;
+  closed_at?: string | null;
   tags?: string[];
 };
 
@@ -152,6 +154,7 @@ const money2 = (n: number) => `$${n.toFixed(3)}`;
 type BasePayload = {
   asset_name: string;
   trade_datetime: string;
+  closed_at: string | null;
   side: Side;
   status: Status;
   amount_spent: number;
@@ -188,10 +191,10 @@ function JournalsPageContent() {
 
   const [movedOutBanner, setMovedOutBanner] = useState<string | null>(null);
 
-  const [showSearch, setShowSearch] = useState(false);
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"new" | "az" | "za" | "tag_az" | "tag_za">("new");
-  const [showMenu, setShowMenu] = useState(false);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [directionFilter, setDirectionFilter] = useState<DirectionFilter>("all");
+  const [assetFilter, setAssetFilter] = useState("all");
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"create" | "edit">("create");
@@ -217,7 +220,6 @@ function JournalsPageContent() {
   const [newTagName, setNewTagName] = useState("");
   const [newTagColor, setNewTagColor] = useState("#7C3AED");
   const [showNewTagForm, setShowNewTagForm] = useState(false);
-  const [selectedTagName, setSelectedTagName] = useState("");
 
   const {
     register,
@@ -233,6 +235,7 @@ function JournalsPageContent() {
       asset_name: "",
       trade_type: 1,
       trade_datetime: toLocalInputValue(new Date()),
+      closed_datetime: "",
       trading_fee: "0",
       notes_entry: "",
       notes_review: "",
@@ -452,24 +455,6 @@ function JournalsPageContent() {
     }).toString();
   }
 
-  function resetToLast6Months() {
-    const now = new Date();
-    const s = new Date(new Date().setMonth(now.getMonth() - 6));
-    s.setHours(0, 0, 0, 0);
-
-    const startYMD = s.toISOString().slice(0, 10);
-    const endYMD = now.toISOString().slice(0, 10);
-
-    setStart(startYMD);
-    setEnd(endYMD);
-
-    try {
-      localStorage.removeItem("jrnl.range");
-    } catch {}
-
-    void load();
-  }
-
   function normalizeJournal(it: JournalApiItem): JournalRow {
     const unifiedFee =
       (it.trading_fee ?? null) != null
@@ -511,11 +496,6 @@ function JournalsPageContent() {
         fetch(`/api/journals`, { cache: "no-store" }),
       ]);
 
-      if (!jr.ok) throw new Error(await jr.text());
-
-      const j: JournalIndexResponse = await jr.json();
-      setItems((j.items ?? []).map(normalizeJournal));
-
       if (!jn.ok) throw new Error(await jn.text());
       const jnPayload = (await jn.json()) as JournalsPayload;
       const list = jnPayload.items ?? [];
@@ -526,6 +506,11 @@ function JournalsPageContent() {
         list.find((x) => x.id === (jnPayload.activeJournalId ?? ""))?.name ??
         "";
       setActiveJournalName(name);
+
+      if (!jr.ok) throw new Error(await jr.text());
+
+      const j: JournalIndexResponse = await jr.json();
+      setItems((j.items ?? []).map(normalizeJournal));
 
       return (j.items ?? []).map(normalizeJournal);
     } catch (e) {
@@ -590,34 +575,42 @@ function JournalsPageContent() {
     const q = query.trim().toLowerCase();
     if (q)
       arr = arr.filter((i) =>
-        `${i.asset_name} ${i.status} ${i.side} ${(i.tags ?? []).join(" ")}`
+        `${i.asset_name} ${i.status} ${i.side} ${(i.tags ?? []).join(" ")} ${i.notes_entry ?? ""} ${i.notes_review ?? ""}`
           .toLowerCase()
           .includes(q),
       );
-    if (selectedTagName) {
-      arr = arr.filter((i) => (i.tags ?? []).includes(selectedTagName));
+    if (assetFilter !== "all") {
+      arr = arr.filter((i) => i.asset_name.toUpperCase() === assetFilter);
     }
-    switch (sort) {
-      case "az":
-        return [...arr].sort((a, b) =>
-          a.asset_name.localeCompare(b.asset_name),
-        );
-      case "za":
-        return [...arr].sort((a, b) =>
-          b.asset_name.localeCompare(a.asset_name),
-        );
-      case "tag_az":
-        return [...arr].sort((a, b) =>
-          ((a.tags ?? [])[0] ?? "").localeCompare((b.tags ?? [])[0] ?? ""),
-        );
-      case "tag_za":
-        return [...arr].sort((a, b) =>
-          ((b.tags ?? [])[0] ?? "").localeCompare((a.tags ?? [])[0] ?? ""),
-        );
-      default:
-        return [...arr].sort((a, b) => +new Date(b.date) - +new Date(a.date));
+    if (directionFilter !== "all") {
+      arr = arr.filter((i) => {
+        const longLike = i.side === "buy" || i.side === "long";
+        return directionFilter === "long" ? longLike : !longLike;
+      });
     }
-  }, [items, query, sort, selectedTagName]);
+    if (statusFilter !== "all") {
+      arr = arr.filter((i) => {
+        if (statusFilter === "open") return i.status === "in_progress";
+        return i.status === statusFilter;
+      });
+    }
+    return [...arr].sort((a, b) => +new Date(b.date) - +new Date(a.date));
+  }, [items, query, assetFilter, directionFilter, statusFilter]);
+
+  function updateDateRange(next: { start?: string; end?: string }) {
+    const nextStart = next.start ?? start;
+    const nextEnd = next.end ?? end;
+
+    setStart(nextStart);
+    setEnd(nextEnd);
+
+    try {
+      localStorage.setItem(
+        "jrnl.range",
+        JSON.stringify({ start: nextStart, end: nextEnd }),
+      );
+    } catch {}
+  }
 
   function openCreate() {
     setMode("create");
@@ -636,6 +629,7 @@ function JournalsPageContent() {
       asset_name: "",
       trade_type: 1,
       trade_datetime: toLocalInputValue(new Date()),
+      closed_datetime: "",
       amount: "",
       notes_entry: "",
       notes_review: "",
@@ -666,6 +660,7 @@ function JournalsPageContent() {
       asset_name: row.asset_name,
       trade_type: row.trade_type,
       trade_datetime: toLocalInputValue(row.date),
+      closed_datetime: row.closed_at ? toLocalInputValue(row.closed_at) : "",
       side: row.side,
       status: row.status,
       amount_spent: String(row.amount_spent),
@@ -770,6 +765,13 @@ function JournalsPageContent() {
       setTargets && form.stop_loss_price && form.stop_loss_price.trim()
         ? toNum(form.stop_loss_price)
         : null;
+    const status = (form.status ?? "in_progress") as Status;
+    const closedAt =
+      status === "in_progress"
+        ? null
+        : form.closed_datetime?.trim()
+          ? toISO(form.closed_datetime)
+          : new Date().toISOString();
 
     if (!(amt > 0) || !(entry > 0) || !(fee >= 0)) {
       alert("Please enter valid numbers (you can use commas).");
@@ -800,8 +802,9 @@ function JournalsPageContent() {
     const base: BasePayload = {
       asset_name: form.asset_name,
       trade_datetime: toISO(form.trade_datetime),
+      closed_at: closedAt,
       side: coercedSide,
-      status: (form.status ?? "in_progress") as Status,
+      status,
       amount_spent: amt,
       entry_price: entry,
       exit_price: exit,
@@ -848,6 +851,7 @@ function JournalsPageContent() {
         status: Status;
         exit_price: number | null;
         trading_fee: number;
+        closed_at: string | null;
       };
       const saved: PutReturn = await r.json();
 
@@ -858,6 +862,10 @@ function JournalsPageContent() {
                 ...it,
                 status: saved.status ?? it.status,
                 exit_price: saved.exit_price ?? it.exit_price,
+                closed_at:
+                  typeof saved.closed_at === "string"
+                    ? saved.closed_at
+                    : closedAt ?? it.closed_at,
                 trading_fee:
                   typeof saved.trading_fee === "number"
                     ? saved.trading_fee
@@ -953,60 +961,33 @@ function JournalsPageContent() {
 
   const totalTrades = rows.length;
   const finished = rows.filter((r) => r.status !== "in_progress");
-  const winCount = finished.filter((r) => r.status === "win").length;
-  const lossCount = finished.filter((r) => r.status === "loss").length;
-  const openCount = rows.length - finished.length;
   const winRate = finished.length
-    ? Math.round((winCount * 100) / finished.length)
+    ? Math.round(
+        (finished.filter((i) => i.status === "win").length * 100) /
+          finished.length,
+      )
     : 0;
 
-  const netPnl = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
-  const profitFactor = calcProfitFactor(finished.map((r) => r.pnl));
-  const pfLabel = profitFactorLabel(profitFactor);
-  const avgPositionSize = rows.length
+  const earnings = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
+  const grossProfit = finished.reduce(
+    (acc, r) => acc + Math.max(r.pnl ?? 0, 0),
+    0,
+  );
+  const grossLoss = Math.abs(
+    finished.reduce((acc, r) => acc + Math.min(r.pnl ?? 0, 0), 0),
+  );
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : null;
+  const openTrades = rows.filter((r) => r.status === "in_progress").length;
+  const averagePositionSize = rows.length
     ? rows.reduce((acc, r) => acc + r.amount_spent, 0) / rows.length
     : 0;
-
-  function renderStatusButton(r: JournalRow) {
-    if (r.status === "in_progress") {
-      return (
-        <button
-          title="Close Trade"
-          onClick={() => openCloseModal(r)}
-          className="px-2 py-1 rounded bg-red-600 text-white text-xs hover:bg-red-700"
-        >
-          Close Trade
-        </button>
-      );
-    }
-
-    const label = r.status.replace(/_/g, " ");
-    const formatted =
-      label.charAt(0).toUpperCase() + label.slice(1).toLowerCase();
-
-    let bg = "bg-green-500";
-    let hover = "hover:bg-green-700";
-    let text = "text-white";
-
-    if (r.status === "loss") {
-      bg = "bg-orange-600";
-      hover = "hover:bg-orange-700";
-    } else if (r.status === "break_even") {
-      bg = "bg-gray-200";
-      hover = "hover:bg-gray-300";
-      text = "text-gray-700";
-    }
-
-    return (
-      <button
-        title={formatted}
-        onClick={() => {}}
-        className={`px-2 py-1 rounded ${bg} ${text} text-xs ${hover}`}
-      >
-        {formatted}
-      </button>
-    );
-  }
+  const assets = useMemo(
+    () =>
+      Array.from(new Set(items.map((item) => item.asset_name.toUpperCase())))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [items],
+  );
 
   function toggleRow(id: string) {
     setExpandedRowId((prev) => (prev === id ? null : id));
@@ -1050,6 +1031,7 @@ function JournalsPageContent() {
       const baseClose: BasePayload = {
         asset_name: rowToClose.asset_name,
         trade_datetime: toISO(toLocalInputValue(rowToClose.date)),
+        closed_at: new Date().toISOString(),
         side: rowToClose.side,
         status: computedStatus,
         amount_spent: rowToClose.amount_spent,
@@ -1082,6 +1064,10 @@ function JournalsPageContent() {
                 ...it,
                 status: saved.status ?? it.status,
                 exit_price: saved.exit_price ?? it.exit_price,
+                closed_at:
+                  typeof saved.closed_at === "string"
+                    ? saved.closed_at
+                    : baseClose.closed_at ?? it.closed_at,
                 trading_fee:
                   typeof saved.trading_fee === "number"
                     ? saved.trading_fee
@@ -1366,74 +1352,38 @@ function JournalsPageContent() {
       <JournalSummaryCards
         totalTrades={totalTrades}
         winRate={winRate}
-        winCount={winCount}
-        lossCount={lossCount}
-        openCount={openCount}
-        netPnl={netPnl}
+        earnings={earnings}
         profitFactor={profitFactor}
-        profitFactorLabel={pfLabel}
-        avgPositionSize={avgPositionSize}
+        openTrades={openTrades}
+        averagePositionSize={averagePositionSize}
       />
-
-      <Card>
-        <div className="flex items-center gap-3 flex-wrap">
-          <div className="text-sm text-gray-600">Date range:</div>
-
-          <input
-            type="date"
-            value={start}
-            onChange={(e) => setStart(e.target.value)}
-            className="rounded-xl border border-gray-200 px-3 py-2"
-          />
-          <span className="text-gray-400">—</span>
-          <input
-            type="date"
-            value={end}
-            onChange={(e) => setEnd(e.target.value)}
-            className="rounded-xl border border-gray-200 px-3 py-2"
-          />
-
-          <button
-            className="rounded-xl bg-white px-3 py-2 text-sm border"
-            onClick={() => {
-              try {
-                localStorage.setItem("jrnl.range", JSON.stringify({ start, end }));
-              } catch {}
-              void load();
-            }}
-          >
-            Apply
-          </button>
-          <button
-            className="rounded-xl bg-gray-100 px-3 py-2 text-sm"
-            onClick={resetToLast6Months}
-          >
-            Reset
-          </button>
-        </div>
-      </Card>
 
       <JournalTradesCard
         loading={loading}
         error={error}
         rows={rows}
-        showMenu={showMenu}
+        query={query}
+        start={start}
+        end={end}
         availableTags={availableTags}
-        selectedTagName={selectedTagName}
+        statusFilter={statusFilter}
+        directionFilter={directionFilter}
+        assetFilter={assetFilter}
+        assets={assets}
         expandedRowId={expandedRowId}
-        onToggleMenu={() => setShowMenu((m) => !m)}
-        onCloseMenu={() => setShowMenu(false)}
-        onSortChange={setSort}
-        onSelectedTagChange={setSelectedTagName}
+        onQueryChange={setQuery}
+        onStartChange={(value) => updateDateRange({ start: value })}
+        onEndChange={(value) => updateDateRange({ end: value })}
+        onStatusFilterChange={setStatusFilter}
+        onDirectionFilterChange={setDirectionFilter}
+        onAssetFilterChange={setAssetFilter}
         onRefresh={() => {
           void load();
         }}
-        onResetRange={resetToLast6Months}
         onToggleRow={toggleRow}
         onOpenCloseModal={openCloseModal}
         onOpenEdit={openEdit}
         onAskDelete={askDelete}
-        renderStatusButton={renderStatusButton}
         fmt4={fmt4}
         money2={money2}
       />
@@ -1929,6 +1879,19 @@ function JournalsPageContent() {
                       )}
                     </div>
                   </>
+                )}
+
+                {wStatus && wStatus !== "in_progress" && (
+                  <div>
+                    <div className="text-sm mb-1">
+                      Date & Time Closed
+                    </div>
+                    <input
+                      type="datetime-local"
+                      {...register("closed_datetime")}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2"
+                    />
+                  </div>
                 )}
 
                 <label className="flex items-center gap-2 rounded-xl border border-gray-200 px-3 py-2 text-sm">

@@ -1,11 +1,9 @@
-import React, { useState } from "react";
-import Card from "@/components/ui/Card";
-import { Table, Th, Td } from "@/components/ui/Table";
+import React, { useRef } from "react";
 import DropdownActions from "@/components/journals/DropdownActions";
-import { calcPnl, calcRiskReward, formatDuration } from "@/lib/trade-helpers";
 import type { JournalRow } from "@/app/(app)/journal/journal-client";
 
-type SortOrder = "new" | "az" | "za" | "tag_az" | "tag_za";
+type StatusFilter = "all" | "open" | "win" | "loss";
+type DirectionFilter = "all" | "long" | "short";
 
 type TagOption = {
   id: string;
@@ -17,612 +15,638 @@ type JournalTradesCardProps = {
   loading: boolean;
   error: string | null;
   rows: JournalRow[];
-  showMenu: boolean;
+  query: string;
+  start: string;
+  end: string;
   availableTags: TagOption[];
-  selectedTagName: string;
+  statusFilter: StatusFilter;
+  directionFilter: DirectionFilter;
+  assetFilter: string;
+  assets: string[];
   expandedRowId: string | null;
-  onToggleMenu: () => void;
-  onCloseMenu: () => void;
-  onSortChange: (sort: SortOrder) => void;
-  onSelectedTagChange: (tagName: string) => void;
+  onQueryChange: (value: string) => void;
+  onStartChange: (value: string) => void;
+  onEndChange: (value: string) => void;
+  onStatusFilterChange: (value: StatusFilter) => void;
+  onDirectionFilterChange: (value: DirectionFilter) => void;
+  onAssetFilterChange: (value: string) => void;
   onRefresh: () => void;
-  onResetRange: () => void;
   onToggleRow: (id: string) => void;
   onOpenCloseModal: (row: JournalRow) => void;
   onOpenEdit: (row: JournalRow) => void;
   onAskDelete: (id: string) => void;
-  renderStatusButton: (row: JournalRow) => React.ReactNode;
   fmt4: (n: number | null | undefined) => string;
   money2: (n: number) => string;
 };
-
-// "Estimated PnL" describes the raw entry->exit price move, always using the row's actual
-// exit_price — unlike the realized `pnl` column, which substitutes stop_loss_price for a
-// "loss" status trade (see calcJournalPnl). They intentionally differ on loss trades.
-function estimatedPnl(r: JournalRow): { amount: number; pct: number } | null {
-  if (r.exit_price == null) return null;
-  const amount = calcPnl({
-    side: r.side,
-    entry: r.entry_price,
-    exit: r.exit_price,
-    amountSpent: r.amount_spent,
-    tradeType: r.trade_type,
-    tradingFee: r.trading_fee,
-  });
-  if (amount == null) return null;
-  const pct = r.amount_spent > 0 ? (amount / r.amount_spent) * 100 : 0;
-  return { amount, pct };
-}
-
-function formatOpenedDate(date: string | Date) {
-  const d = new Date(date);
-  return {
-    date: d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }),
-    time: d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }),
-  };
-}
-
-function isLongSide(side: JournalRow["side"]) {
-  return side === "buy" || side === "long";
-}
-
-function DirectionPill({ side }: { side: JournalRow["side"] }) {
-  const isLong = isLongSide(side);
-  return (
-    <span
-      className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1 text-[11px] font-bold ${
-        isLong
-          ? "border-emerald-600/15 bg-emerald-50 text-emerald-700"
-          : "border-red-600/15 bg-red-50 text-red-700"
-      }`}
-    >
-      <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-        {isLong ? (
-          <>
-            <path d="M5 17h10V7" />
-            <path d="m5 7 10 10" />
-          </>
-        ) : (
-          <>
-            <path d="M5 7h10v10" />
-            <path d="m5 17 10-10" />
-          </>
-        )}
-      </svg>
-      {isLong ? "Long" : "Short"}
-    </span>
-  );
-}
-
-const ASSET_BADGE_PALETTE = [
-  "bg-amber-50 text-amber-700",
-  "bg-indigo-50 text-indigo-700",
-  "bg-emerald-50 text-emerald-700",
-  "bg-purple-50 text-purple-700",
-  "bg-blue-50 text-blue-700",
-  "bg-red-50 text-red-700",
-];
-
-function assetBadgeClass(symbol: string) {
-  let hash = 0;
-  for (let i = 0; i < symbol.length; i++) hash = (hash * 31 + symbol.charCodeAt(i)) | 0;
-  return ASSET_BADGE_PALETTE[Math.abs(hash) % ASSET_BADGE_PALETTE.length];
-}
-
-function AssetBadge({ symbol }: { symbol: string }) {
-  return (
-    <div
-      className={`grid h-[34px] w-[34px] shrink-0 place-items-center rounded-[10px] text-xs font-extrabold ${assetBadgeClass(symbol)}`}
-    >
-      {symbol.slice(0, 1)}
-    </div>
-  );
-}
-
-function ChevronButton({ open }: { open: boolean }) {
-  return (
-    <span className="grid h-[26px] w-[26px] shrink-0 place-items-center rounded-[7px] text-gray-400 hover:bg-gray-100">
-      <svg
-        width="15"
-        height="15"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth={2}
-        className="transition-transform duration-150"
-        style={{ transform: open ? "rotate(90deg)" : "none" }}
-      >
-        <path d="m9 6 6 6-6 6" />
-      </svg>
-    </span>
-  );
-}
-
-const TH_CLASS =
-  "whitespace-nowrap py-3 px-3.5 text-[11px] font-bold uppercase tracking-[0.04em] text-gray-400 bg-gray-50/60";
 
 export default function JournalTradesCard({
   loading,
   error,
   rows,
-  showMenu,
+  query,
+  start,
+  end,
   availableTags,
-  selectedTagName,
+  statusFilter,
+  directionFilter,
+  assetFilter,
+  assets,
   expandedRowId,
-  onToggleMenu,
-  onCloseMenu,
-  onSortChange,
-  onSelectedTagChange,
+  onQueryChange,
+  onStartChange,
+  onEndChange,
+  onStatusFilterChange,
+  onDirectionFilterChange,
+  onAssetFilterChange,
   onRefresh,
-  onResetRange,
   onToggleRow,
   onOpenCloseModal,
   onOpenEdit,
   onAskDelete,
-  renderStatusButton,
   fmt4,
   money2,
 }: JournalTradesCardProps) {
   function tagColor(name: string) {
-    return availableTags.find((tag) => tag.name === name)?.color ?? "#9CA3AF";
+    return availableTags.find((tag) => tag.name === name)?.color ?? "#667085";
   }
 
-  function TagCell({ tags }: { tags?: string[] }) {
-    const [expanded, setExpanded] = useState(false);
+  function renderTags(tags?: string[]) {
     const clean = (tags ?? []).filter(Boolean);
-    if (!clean.length) return <span className="text-gray-400">-</span>;
-
-    const visible = expanded ? clean : clean.slice(0, 3);
-    const hiddenCount = clean.length - visible.length;
+    if (!clean.length) {
+      return null;
+    }
 
     return (
-      <div className="flex flex-wrap items-center gap-1.5">
-        {visible.map((tag) => (
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
+        {clean.slice(0, 3).map((tag) => (
           <span
             key={tag}
-            className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2 py-0.5 text-[11px] font-semibold text-gray-700"
+            className="inline-flex min-h-6 items-center gap-1.5 rounded-full bg-[#f2f4f7] px-2 text-[11px] font-semibold text-[#475467]"
           >
             <span
-              className="h-2 w-2 rounded-full"
+              className="h-1.5 w-1.5 rounded-full"
               style={{ backgroundColor: tagColor(tag) }}
             />
             {tag}
           </span>
         ))}
-        {hiddenCount > 0 && (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              setExpanded(true);
-            }}
-            className="inline-flex items-center rounded-full border border-gray-200 px-2 py-0.5 text-[11px] font-semibold text-gray-600 hover:bg-gray-50"
-          >
-            +{hiddenCount} more
-          </button>
+        {clean.length > 3 && (
+          <span className="inline-flex min-h-6 items-center rounded-full border border-[#d4dbe6] bg-white px-2 text-[11px] font-bold text-[#4f46e5]">
+            +{clean.length - 3} more
+          </span>
         )}
-      </div>
-    );
-  }
-
-  function EntryExitCell({ r }: { r: JournalRow }) {
-    const est = estimatedPnl(r);
-    return (
-      <div className="font-mono">
-        <div className="font-bold text-gray-800">
-          ${fmt4(r.entry_price)} → {r.exit_price != null ? `$${fmt4(r.exit_price)}` : "-"}
-        </div>
-        {est && (
-          <div
-            className={`text-[11px] font-bold ${
-              est.amount > 0 ? "text-emerald-600" : est.amount < 0 ? "text-red-600" : "text-gray-500"
-            }`}
-          >
-            Estimated PnL: {est.amount >= 0 ? "+" : "-"}${Math.abs(est.amount).toFixed(2)} (
-            {est.pct >= 0 ? "+" : "-"}
-            {Math.abs(est.pct).toFixed(2)}%)
-          </div>
-        )}
-      </div>
-    );
-  }
-
-  function PositionSizeCell({ r }: { r: JournalRow }) {
-    const qty = r.entry_price > 0 ? fmt4(r.amount_spent / r.entry_price) : "—";
-    return (
-      <div className="font-mono">
-        <div className="text-[14px] font-extrabold tracking-tight text-gray-900">
-          {money2(r.amount_spent)}
-        </div>
-        <div className="text-[11px] font-semibold text-gray-500">
-          {qty} {r.asset_name}
-        </div>
-      </div>
-    );
-  }
-
-  function DetailItem({ label, value }: { label: string; value: React.ReactNode }) {
-    return (
-      <div>
-        <span className="mb-1 block text-[10px] font-bold uppercase tracking-[0.04em] text-gray-400">
-          {label}
-        </span>
-        <strong className="text-[12px] font-bold text-gray-700">{value}</strong>
-      </div>
-    );
-  }
-
-  function DetailCard({ r }: { r: JournalRow }) {
-    return (
-      <div className="rounded-xl border border-gray-200 bg-white p-4">
-        <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-          <DetailItem
-            label="Stop loss"
-            value={
-              <span className="font-mono">
-                {r.stop_loss_price != null ? fmt4(r.stop_loss_price) : "—"}
-              </span>
-            }
-          />
-          <DetailItem
-            label="Risk / reward"
-            value={calcRiskReward(r.entry_price, r.stop_loss_price, r.exit_price)}
-          />
-          <DetailItem label="Duration" value={formatDuration(r.date, r.closed_at)} />
-          <DetailItem label="Note" value={r.notes_entry || r.notes_review || "—"} />
-        </div>
       </div>
     );
   }
 
   return (
-    <Card className="p-0 overflow-hidden">
-      <div className="flex items-center justify-between gap-4 border-b border-gray-200 px-[22px] py-4">
-        <div className="flex items-baseline gap-2.5">
-          <h3 className="text-[17px] font-extrabold text-gray-900">Trade history</h3>
-          <span className="text-xs text-gray-500">
-            {rows.length} {rows.length === 1 ? "trade" : "trades"}
-          </span>
+    <>
+      <section className="flex flex-wrap items-center gap-3 rounded-2xl border border-[#e3e8f0] bg-white p-3.5 shadow-[0_1px_2px_rgba(16,24,40,.04),0_8px_24px_rgba(16,24,40,.05)]">
+        <label className="relative min-w-[280px] flex-[1_1_320px]">
+          <span className="sr-only">Search trades</span>
+          <svg aria-hidden="true" className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-[#98a2b3]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <circle cx="11" cy="11" r="7" />
+            <path d="m20 20-4-4" />
+          </svg>
+          <input
+            value={query}
+            onChange={(e) => onQueryChange(e.target.value)}
+            placeholder="Search asset, setup, tag, or note..."
+            type="search"
+            className="h-[42px] w-full rounded-xl border border-[#d4dbe6] bg-white pl-10 pr-3 text-sm text-[#344054] outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#eef2ff]"
+          />
+        </label>
+
+        <div className="flex min-h-[42px] items-center gap-2 whitespace-nowrap rounded-xl border border-[#d4dbe6] bg-white px-3 text-sm text-[#344054]">
+          <svg aria-hidden="true" className="h-4 w-4 text-[#667085]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <rect height="16" rx="2" width="18" x="3" y="5" />
+            <path d="M16 3v4M8 3v4M3 10h18" />
+          </svg>
+          <DatePickerText
+            label="Start date"
+            value={start}
+            onChange={onStartChange}
+          />
+          <span className="text-[#98a2b3]">-</span>
+          <DatePickerText label="End date" value={end} onChange={onEndChange} />
         </div>
-        <div className="relative">
-          <button
-            onClick={onToggleMenu}
-            aria-label="More options"
-            className="grid h-[42px] w-[42px] place-items-center rounded-[11px] border border-gray-200 bg-white text-gray-600 shadow-sm hover:border-gray-300"
-          >
-            <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.9}>
-              <circle cx="5" cy="12" r="1" fill="currentColor" />
-              <circle cx="12" cy="12" r="1" fill="currentColor" />
-              <circle cx="19" cy="12" r="1" fill="currentColor" />
-            </svg>
-          </button>
-          {showMenu && (
-            <div
-              className="absolute right-0 mt-2 w-56 bg-white rounded-xl shadow-lg ring-1 ring-black/5 z-20"
-              onMouseLeave={onCloseMenu}
+
+        <select
+          aria-label="Asset filter"
+          value={assetFilter}
+          onChange={(e) => onAssetFilterChange(e.target.value)}
+          className="h-[42px] rounded-xl border border-[#d4dbe6] bg-white px-3 text-sm font-medium text-[#344054] outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#eef2ff]"
+        >
+          <option value="all">All assets</option>
+          {assets.map((asset) => (
+            <option key={asset} value={asset}>
+              {asset}
+            </option>
+          ))}
+        </select>
+
+        <select
+          aria-label="Direction filter"
+          value={directionFilter}
+          onChange={(e) => onDirectionFilterChange(e.target.value as DirectionFilter)}
+          className="h-[42px] rounded-xl border border-[#d4dbe6] bg-white px-3 text-sm font-medium text-[#344054] outline-none focus:border-[#4f46e5] focus:ring-4 focus:ring-[#eef2ff]"
+        >
+          <option value="all">Long & short</option>
+          <option value="long">Long only</option>
+          <option value="short">Short only</option>
+        </select>
+
+        <div className="flex-[1_1_auto]" />
+
+        <div className="flex rounded-xl border border-[#e3e8f0] bg-[#f8fafc] p-1">
+          {[
+            ["all", "All"],
+            ["open", "Open"],
+            ["win", "Wins"],
+            ["loss", "Losses"],
+          ].map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => onStatusFilterChange(value as StatusFilter)}
+              className={`h-8 rounded-lg px-3 text-xs font-bold ${
+                statusFilter === value
+                  ? "bg-white text-[#152033] shadow-sm"
+                  : "text-[#667085] hover:text-[#152033]"
+              }`}
             >
-              <MenuItem
-                label="Newest"
-                onClick={() => {
-                  onSortChange("new");
-                  onCloseMenu();
-                }}
-                icon="🧾"
-              />
-              <MenuItem
-                label="From A-Z"
-                onClick={() => {
-                  onSortChange("az");
-                  onCloseMenu();
-                }}
-                icon="🔤"
-              />
-              <MenuItem
-                label="From Z-A"
-                onClick={() => {
-                  onSortChange("za");
-                  onCloseMenu();
-                }}
-                icon="🔠"
-              />
-              <MenuItem
-                label="Tag A-Z"
-                onClick={() => {
-                  onSortChange("tag_az");
-                  onCloseMenu();
-                }}
-              />
-              <MenuItem
-                label="Tag Z-A"
-                onClick={() => {
-                  onSortChange("tag_za");
-                  onCloseMenu();
-                }}
-              />
-              <div className="my-1 border-t border-gray-100" />
-              <button
-                onClick={() => onSelectedTagChange("")}
-                className={`w-full px-4 py-2 text-left text-sm hover:bg-gray-50 ${
-                  selectedTagName ? "text-gray-600" : "font-semibold text-gray-900"
-                }`}
-              >
-                All tags
+              {label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="journal-trades rounded-2xl border border-[#e3e8f0] bg-white shadow-[0_1px_2px_rgba(16,24,40,.04),0_8px_24px_rgba(16,24,40,.05)]">
+      <div className="flex items-center justify-between gap-4 border-b border-[#e3e8f0] px-5 py-4">
+        <div>
+          <div className="flex items-baseline gap-2">
+            <h2 className="text-[17px] font-bold text-[#152033]">
+              Trade history
+            </h2>
+            <span className="text-xs text-[#667085]">
+              {rows.length} {rows.length === 1 ? "trade" : "trades"}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-[#667085] md:hidden">
+            Tap the chevron to view additional trade details.
+          </p>
+        </div>
+        <button
+          type="button"
+          onClick={onRefresh}
+          className="grid h-10 w-10 place-items-center rounded-xl border border-[#d4dbe6] bg-white text-[#667085] hover:bg-[#f8fafc]"
+          aria-label="Refresh trades"
+        >
+          <svg aria-hidden="true" className="h-4 w-4" fill="none" stroke="currentColor" strokeWidth="1.9" viewBox="0 0 24 24">
+            <path d="M21 12a9 9 0 0 1-15.3 6.4L3 16" />
+            <path d="M3 21v-5h5" />
+            <path d="M3 12A9 9 0 0 1 18.3 5.6L21 8" />
+            <path d="M21 3v5h-5" />
+          </svg>
+        </button>
+      </div>
+
+      {loading ? (
+        <div className="py-12 text-center text-sm text-[#667085]">Loading...</div>
+      ) : error ? (
+        <div className="py-12 text-center text-sm text-[#d83a52]">{error}</div>
+      ) : rows.length === 0 ? (
+        <div className="py-12 text-center text-sm text-[#667085]">
+          No trades match these filters.
+        </div>
+      ) : (
+        <>
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[1240px] border-collapse text-sm">
+              <thead>
+                <tr>
+                  <HeaderCell className="w-[150px]">Asset</HeaderCell>
+                  <HeaderCell className="w-[92px]">Direction</HeaderCell>
+                  <HeaderCell className="w-[300px]">Entry -&gt; Exit</HeaderCell>
+                  <HeaderCell className="w-[138px]">Position size</HeaderCell>
+                  <HeaderCell className="w-[92px]">P&amp;L</HeaderCell>
+                  <HeaderCell className="w-[128px]">Opened</HeaderCell>
+                  <HeaderCell className="min-w-[275px]">Setups / tags</HeaderCell>
+                  <HeaderCell className="w-[138px] text-right">Status/actions</HeaderCell>
+                </tr>
+              </thead>
+              <tbody>
+                {rows.map((row) => {
+                  const expanded = expandedRowId === row.id;
+                  return (
+                    <React.Fragment key={row.id}>
+                      <TradeRow
+                        row={row}
+                        expanded={expanded}
+                        renderTags={renderTags}
+                        onToggleRow={onToggleRow}
+                        onOpenCloseModal={onOpenCloseModal}
+                        onOpenEdit={onOpenEdit}
+                        onAskDelete={onAskDelete}
+                        fmt4={fmt4}
+                        money2={money2}
+                      />
+                      {expanded && (
+                        <tr className="bg-[#fbfcff]">
+                          <td colSpan={8} className="border-b border-[#edf0f4] px-14 pb-4">
+                            <DetailCard row={row} fmt4={fmt4} />
+                          </td>
+                        </tr>
+                      )}
+                    </React.Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+          <div className="flex items-center justify-between gap-4 px-5 py-4 text-xs text-[#667085]">
+            <span>
+              Showing 1-{rows.length} of {rows.length} trades
+            </span>
+            <div className="flex items-center gap-1.5">
+              <button className="h-8 w-8 rounded-lg border border-[#e3e8f0] bg-white text-[#667085]" type="button">
+                &lt;
               </button>
-              {availableTags.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => onSelectedTagChange(tag.name)}
-                  className={`flex w-full items-center gap-2 px-4 py-2 text-left text-sm hover:bg-gray-50 ${
-                    selectedTagName === tag.name
-                      ? "font-semibold text-gray-900"
-                      : "text-gray-700"
-                  }`}
-                >
-                  <span
-                    className="h-2 w-2 rounded-full"
-                    style={{ backgroundColor: tag.color ?? "#9CA3AF" }}
-                  />
-                  {tag.name}
-                </button>
-              ))}
-              <div className="my-1 border-t border-gray-100" />
-              <MenuItem
-                label="Refresh"
-                onClick={() => {
-                  onRefresh();
-                  onCloseMenu();
-                }}
-              />
-              <MenuItem
-                label="Reset date range"
-                onClick={() => {
-                  onResetRange();
-                  onCloseMenu();
-                }}
-              />
-              <MenuItem label="Manage Widgets" onClick={onCloseMenu} />
+              <button className="h-8 w-8 rounded-lg border border-[#4f46e5] bg-[#4f46e5] text-white" type="button">
+                1
+              </button>
+              <button className="h-8 w-8 rounded-lg border border-[#e3e8f0] bg-white text-[#667085]" type="button">
+                &gt;
+              </button>
             </div>
-          )}
-        </div>
-      </div>
-
-      {selectedTagName && (
-        <div className="px-6 pb-3">
-          <button
-            type="button"
-            onClick={() => onSelectedTagChange("")}
-            className="inline-flex items-center gap-1.5 rounded-full border border-gray-200 bg-gray-50 px-3 py-1 text-xs text-gray-700 hover:bg-gray-100"
-          >
-            <span
-              className="h-2 w-2 rounded-full"
-              style={{ backgroundColor: tagColor(selectedTagName) }}
-            />
-            {selectedTagName}
-            <span className="text-gray-500">x</span>
-          </button>
-        </div>
+          </div>
+        </>
       )}
-
-      <div className="overflow-x-auto hidden md:block">
-        {loading ? (
-          <div className="px-6 py-10 text-center text-sm text-gray-500">
-            Loading…
-          </div>
-        ) : error ? (
-          <div className="px-6 py-10 text-center text-sm text-red-600">{error}</div>
-        ) : (
-          <Table className="min-w-[1080px] md:min-w-full border-collapse text-xs">
-            <thead>
-              <tr className="border-b border-gray-200">
-                <Th className={`${TH_CLASS} w-40`}>Asset</Th>
-                <Th className={`${TH_CLASS} w-24`}>Direction</Th>
-                <Th className={`${TH_CLASS} w-64`}>Entry → Exit</Th>
-                <Th className={`${TH_CLASS} w-32`}>Position size</Th>
-                <Th className={`${TH_CLASS} w-24`}>P&L</Th>
-                <Th className={`${TH_CLASS} hidden md:table-cell w-32`}>Opened</Th>
-                <Th className={`${TH_CLASS} w-56`}>Setups / Tags</Th>
-                <Th className={`${TH_CLASS} w-36 text-right pr-4`}>Status / Actions</Th>
-              </tr>
-            </thead>
-            <tbody>
-              {rows.map((r) => {
-                const isOpenRow = expandedRowId === r.id;
-                return (
-                  <React.Fragment key={r.id}>
-                    <tr
-                      className={`cursor-pointer hover:bg-[#fafbff] ${isOpenRow ? "bg-[#fbfcff]" : ""}`}
-                      onClick={() => onToggleRow(r.id)}
-                    >
-                      <Td className="whitespace-nowrap w-40 py-3.5 px-3.5">
-                        <div className="flex items-center gap-2.5">
-                          <ChevronButton open={isOpenRow} />
-                          <AssetBadge symbol={r.asset_name} />
-                          <div>
-                            <div className="font-extrabold text-gray-900">{r.asset_name}</div>
-                            <div className="text-[11px] text-gray-500">
-                              {r.trade_type === 2 ? "Futures" : "Spot"}
-                            </div>
-                          </div>
-                        </div>
-                      </Td>
-
-                      <Td className="whitespace-nowrap w-24 px-3.5">
-                        <DirectionPill side={r.side} />
-                      </Td>
-
-                      <Td className="w-64 px-3.5">
-                        <EntryExitCell r={r} />
-                      </Td>
-
-                      <Td className="w-32 px-3.5">
-                        <PositionSizeCell r={r} />
-                      </Td>
-
-                      <Td className="font-mono w-24 px-3.5">
-                        <span
-                          className={
-                            r.pnl != null && r.pnl > 0
-                              ? "text-emerald-600 font-bold"
-                              : r.pnl != null && r.pnl < 0
-                                ? "text-red-600 font-bold"
-                                : "text-gray-400 font-semibold"
-                          }
-                        >
-                          {r.pnl != null ? money2(r.pnl) : "—"}
-                        </span>
-                      </Td>
-
-                      <Td className="hidden md:table-cell w-32 px-3.5">
-                        <div className="font-bold text-gray-800">
-                          {formatOpenedDate(r.date).date}
-                        </div>
-                        <div className="text-[11px] text-gray-400">
-                          {formatOpenedDate(r.date).time}
-                        </div>
-                      </Td>
-
-                      <Td className="w-56 px-3.5">
-                        <TagCell tags={r.tags} />
-                      </Td>
-
-                      <Td className="w-36 px-3.5 relative">
-                        <div className="flex items-center justify-end gap-2.5">
-                          {renderStatusButton(r)}
-                          <DropdownActions
-                            r={r}
-                            openEdit={onOpenEdit}
-                            askDelete={onAskDelete}
-                            onQuickClose={
-                              r.status === "in_progress" ? onOpenCloseModal : undefined
-                            }
-                          />
-                        </div>
-                      </Td>
-                    </tr>
-
-                    {isOpenRow && (
-                      <tr className="bg-[#fbfcff]">
-                        <Td colSpan={8} className="!pt-0 !pb-3.5 pl-[76px] pr-3.5 text-xs text-gray-700">
-                          <DetailCard r={r} />
-                        </Td>
-                      </tr>
-                    )}
-                  </React.Fragment>
-                );
-              })}
-            </tbody>
-          </Table>
-        )}
-      </div>
-
-      <div className="px-3 pb-3 md:hidden">
-        {loading ? (
-          <div className="py-8 text-center text-sm text-gray-500">Loading…</div>
-        ) : error ? (
-          <div className="py-8 text-center text-sm text-red-600">{error}</div>
-        ) : (
-          <div className="grid gap-3">
-            {rows.map((r) => {
-              const isOpenRow = expandedRowId === r.id;
-              return (
-                <div
-                  key={r.id}
-                  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer"
-                  onClick={() => onToggleRow(r.id)}
-                >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <ChevronButton open={isOpenRow} />
-                      <AssetBadge symbol={r.asset_name} />
-                      <div className="font-extrabold text-gray-900">
-                        {r.asset_name}{" "}
-                        <span className="text-xs font-normal text-gray-500">
-                          ({r.trade_type === 2 ? "Futures" : "Spot"})
-                        </span>
-                      </div>
-                    </div>
-                    <DirectionPill side={r.side} />
-                  </div>
-
-                  <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
-                    <div className="col-span-2">
-                      <div className="text-gray-500 text-xs">Entry → Exit</div>
-                      <EntryExitCell r={r} />
-                    </div>
-
-                    <div>
-                      <div className="text-gray-500 text-xs">Position size</div>
-                      <PositionSizeCell r={r} />
-                    </div>
-
-                    <div className="text-right">
-                      <div className="text-gray-500 text-xs">P&L</div>
-                      <div className="font-mono">
-                        {r.pnl != null ? money2(r.pnl) : "—"}
-                      </div>
-                    </div>
-
-                    <div>
-                      <div className="text-gray-500 text-xs">Opened</div>
-                      <div className="font-bold text-gray-800">
-                        {formatOpenedDate(r.date).date}
-                      </div>
-                      <div className="text-[11px] text-gray-400">
-                        {formatOpenedDate(r.date).time}
-                      </div>
-                    </div>
-
-                    <div className="col-span-2">
-                      <div className="text-gray-500 text-xs">Setups / Tags</div>
-                      <div className="mt-1">
-                        <TagCell tags={r.tags} />
-                      </div>
-                    </div>
-                  </div>
-
-                  {isOpenRow && (
-                    <div className="mt-3" onClick={(e) => e.stopPropagation()}>
-                      <DetailCard r={r} />
-                    </div>
-                  )}
-
-                  <div className="mt-4 flex items-center justify-between">
-                    {renderStatusButton(r)}
-                    <DropdownActions
-                      r={r}
-                      openEdit={onOpenEdit}
-                      askDelete={onAskDelete}
-                      onQuickClose={
-                        r.status === "in_progress" ? onOpenCloseModal : undefined
-                      }
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-    </Card>
+      </section>
+    </>
   );
 }
 
-function MenuItem({
-  label,
-  onClick,
-  icon,
+function HeaderCell({
+  children,
+  className = "",
 }: {
-  label: string;
-  onClick: () => void;
-  icon?: string;
+  children: React.ReactNode;
+  className?: string;
 }) {
   return (
-    <button
-      onClick={onClick}
-      className="w-full text-left px-4 py-2 hover:bg-gray-50 rounded-xl flex items-center gap-3"
-    >
-      {icon && <span>{icon}</span>}
-      <span className="text-sm">{label}</span>
-    </button>
+    <th className={`border-b border-[#e3e8f0] bg-[#fbfcfe] px-3.5 py-3 text-left text-[11px] font-bold uppercase tracking-[.04em] text-[#667085] ${className}`}>
+      {children}
+    </th>
   );
+}
+
+function DatePickerText({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+}) {
+  const inputRef = useRef<HTMLInputElement | null>(null);
+
+  function openPicker() {
+    const input = inputRef.current;
+    if (!input) return;
+
+    input.focus();
+    if (typeof input.showPicker === "function") {
+      input.showPicker();
+      return;
+    }
+    input.click();
+  }
+
+  return (
+    <span className="relative inline-flex">
+      <button
+        type="button"
+        onClick={openPicker}
+        className="cursor-pointer bg-transparent p-0 text-left text-sm text-[#344054]"
+      >
+        {formatFilterDate(value)}
+      </button>
+      <input
+        ref={inputRef}
+        aria-label={label}
+        type="date"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="journal-date-input absolute inset-0 h-full w-full cursor-pointer opacity-0"
+        tabIndex={-1}
+      />
+    </span>
+  );
+}
+
+function TradeRow({
+  row,
+  expanded,
+  renderTags,
+  onToggleRow,
+  onOpenCloseModal,
+  onOpenEdit,
+  onAskDelete,
+  fmt4,
+  money2,
+}: {
+  row: JournalRow;
+  expanded: boolean;
+  renderTags: (tags?: string[]) => React.ReactNode;
+  onToggleRow: (id: string) => void;
+  onOpenCloseModal: (row: JournalRow) => void;
+  onOpenEdit: (row: JournalRow) => void;
+  onAskDelete: (id: string) => void;
+  fmt4: (n: number | null | undefined) => string;
+  money2: (n: number) => string;
+}) {
+  const quantity = row.entry_price > 0 ? row.amount_spent / row.entry_price : null;
+  const estimate = estimateMove(row);
+  const opened = formatOpened(row.date);
+
+  return (
+    <tr className={`transition hover:bg-[#fafbff] ${expanded ? "bg-[#fbfcff]" : ""}`}>
+      <BodyCell dataLabel="Asset">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <button
+            aria-label="Toggle trade details"
+            type="button"
+            onClick={() => onToggleRow(row.id)}
+            className="grid h-[26px] w-[26px] place-items-center rounded-lg text-[#667085] hover:bg-[#f8fafc]"
+          >
+            <svg
+              aria-hidden="true"
+              className={`h-4 w-4 transition ${expanded ? "rotate-90" : ""}`}
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+            >
+              <path d="m9 6 6 6-6 6" />
+            </svg>
+          </button>
+          <div className={`grid h-[34px] w-[34px] place-items-center rounded-xl text-xs font-extrabold ${assetTone(row.asset_name)}`}>
+            {assetGlyph(row.asset_name)}
+          </div>
+          <div className="min-w-0">
+            <div className="font-bold text-[#152033]">{row.asset_name}</div>
+            <div className="mt-0.5 text-[11px] text-[#98a2b3]">
+              {row.trade_type === 2 ? "Futures" : "Spot"}
+            </div>
+          </div>
+        </div>
+      </BodyCell>
+
+      <BodyCell dataLabel="Direction">
+        <DirectionPill side={row.side} />
+      </BodyCell>
+
+      <BodyCell dataLabel="Entry -> Exit">
+        <div className="font-mono text-xs tabular-nums">
+          <strong className="block font-bold text-[#152033]">
+            ${fmt4(row.entry_price)} -&gt; {row.exit_price != null ? `$${fmt4(row.exit_price)}` : "-"}
+          </strong>
+          {estimate && (
+            <span className={`mt-1 block font-bold ${estimate.pnl >= 0 ? "text-[#11895a]" : "text-[#d83a52]"}`}>
+              Estimated PnL: {estimate.pnl >= 0 ? "+" : "-"}${Math.abs(estimate.pnl).toFixed(2)} ({estimate.percent >= 0 ? "+" : "-"}{Math.abs(estimate.percent).toFixed(2)}%)
+            </span>
+          )}
+        </div>
+      </BodyCell>
+
+      <BodyCell dataLabel="Position size">
+        <div className="font-mono tabular-nums">
+          <strong className="block text-sm font-bold text-[#152033]">
+            {money2(row.amount_spent)}
+          </strong>
+          <span className="mt-1 block text-[11px] font-semibold text-[#667085]">
+            {quantity != null ? `${fmt4(quantity)} ${row.asset_name}` : "-"}
+          </span>
+        </div>
+      </BodyCell>
+
+      <BodyCell dataLabel="P&L">
+        {row.pnl == null || row.status === "in_progress" ? (
+          <div className="font-bold text-[#b76e00]">-</div>
+        ) : (
+          <div className={`font-mono font-bold tabular-nums ${row.pnl >= 0 ? "text-[#11895a]" : "text-[#d83a52]"}`}>
+            {row.pnl >= 0 ? "+" : "-"}${Math.abs(row.pnl).toFixed(2)}
+          </div>
+        )}
+      </BodyCell>
+
+      <BodyCell dataLabel="Opened">
+        <div>
+          <strong className="block text-xs font-bold text-[#152033]">{opened.date}</strong>
+          <span className="text-[11px] text-[#98a2b3]">{opened.time}</span>
+        </div>
+      </BodyCell>
+
+      <BodyCell dataLabel="Setups / tags">{renderTags(row.tags)}</BodyCell>
+
+      <BodyCell className="text-right" dataLabel="Status/actions">
+        <div className="flex items-center justify-end gap-2.5">
+          <StatusPill status={row.status} />
+          <DropdownActions
+            r={row}
+            openEdit={onOpenEdit}
+            askDelete={onAskDelete}
+            onQuickClose={onOpenCloseModal}
+          />
+        </div>
+      </BodyCell>
+    </tr>
+  );
+}
+
+function BodyCell({
+  children,
+  className = "",
+  dataLabel,
+}: {
+  children: React.ReactNode;
+  className?: string;
+  dataLabel: string;
+}) {
+  return (
+    <td
+      data-label={dataLabel}
+      className={`border-b border-[#edf0f4] px-3.5 py-3.5 align-middle text-[#344054] ${className}`}
+    >
+      {children}
+    </td>
+  );
+}
+
+function DetailCard({
+  row,
+  fmt4,
+}: {
+  row: JournalRow;
+  fmt4: (n: number | null | undefined) => string;
+}) {
+  const note = truncateText(
+    row.notes_entry?.trim() || row.notes_review?.trim() || "-",
+    90,
+  );
+
+  return (
+    <div className="grid gap-4 rounded-xl border border-[#e3e8f0] bg-white p-3.5 md:grid-cols-4">
+      <DetailItem label="Stop loss" value={row.stop_loss_price != null ? `$${fmt4(row.stop_loss_price)}` : "-"} mono />
+      <DetailItem label="Risk / reward" value={riskReward(row)} />
+      <DetailItem label="Duration" value={tradeDuration(row)} />
+      <DetailItem label="Notes" value={note} />
+    </div>
+  );
+}
+
+function DetailItem({
+  label,
+  value,
+  mono = false,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <span className="mb-1 block text-[10px] font-bold uppercase tracking-[.04em] text-[#98a2b3]">
+        {label}
+      </span>
+      <strong className={`text-xs font-bold text-[#344054] ${mono ? "font-mono" : ""}`}>
+        {value}
+      </strong>
+    </div>
+  );
+}
+
+function DirectionPill({ side }: { side: JournalRow["side"] }) {
+  const short = side === "sell" || side === "short";
+  return (
+    <span className={`inline-flex min-h-7 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-bold ${short ? "border-[#f5c9cf] bg-[#fff0f2] text-[#d83a52]" : "border-[#c9eadb] bg-[#eaf8f1] text-[#11895a]"}`}>
+      <svg aria-hidden="true" className="h-3.5 w-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        {short ? (
+          <>
+            <path d="M5 7h10v10" />
+            <path d="m5 17 10-10" />
+          </>
+        ) : (
+          <>
+            <path d="M5 17h10V7" />
+            <path d="m5 7 10 10" />
+          </>
+        )}
+      </svg>
+      {short ? "Short" : "Long"}
+    </span>
+  );
+}
+
+function StatusPill({ status }: { status: JournalRow["status"] }) {
+  const config = {
+    in_progress: ["Open", "bg-[#fff7e6] text-[#b76e00]"],
+    win: ["Win", "bg-[#eaf8f1] text-[#11895a]"],
+    loss: ["Loss", "bg-[#fff0f2] text-[#d83a52]"],
+    break_even: ["Break-even", "bg-[#eef4ff] text-[#4f46e5]"],
+  } as const;
+  const [label, className] = config[status];
+
+  return (
+    <span className={`inline-flex min-h-7 min-w-[68px] items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 text-[11px] font-bold ${className}`}>
+      <span className="h-1.5 w-1.5 rounded-full bg-current" />
+      {label}
+    </span>
+  );
+}
+
+function estimateMove(row: JournalRow) {
+  if (row.exit_price == null || !(row.entry_price > 0)) return null;
+  const longLike = row.side === "buy" || row.side === "long";
+  const change = (row.exit_price - row.entry_price) / row.entry_price;
+  const pnl = (longLike ? 1 : -1) * row.amount_spent * change;
+  return { pnl, percent: (longLike ? 1 : -1) * change * 100 };
+}
+
+function tradeDuration(row: JournalRow) {
+  if (!row.closed_at || row.status === "in_progress") return "-";
+
+  const opened = new Date(row.date).getTime();
+  const closed = new Date(row.closed_at).getTime();
+  if (!Number.isFinite(opened) || !Number.isFinite(closed) || closed < opened) {
+    return "-";
+  }
+
+  const minutes = Math.max(1, Math.round((closed - opened) / 60000));
+  const days = Math.floor(minutes / 1440);
+  const hours = Math.floor((minutes % 1440) / 60);
+  const mins = minutes % 60;
+
+  if (days > 0) {
+    if (hours > 0) return `${days} day${days === 1 ? "" : "s"} ${hours} h`;
+    return `${days} day${days === 1 ? "" : "s"}`;
+  }
+  if (hours > 0) {
+    if (mins > 0) return `${hours} h ${mins} min`;
+    return `${hours} h`;
+  }
+  return `${mins} min`;
+}
+
+function riskReward(row: JournalRow) {
+  if (row.stop_loss_price == null || row.exit_price == null) return "-";
+  const risk = Math.abs(row.entry_price - row.stop_loss_price);
+  const reward = Math.abs(row.exit_price - row.entry_price);
+  if (!(risk > 0) || !(reward > 0)) return "-";
+  return `1 : ${(reward / risk).toFixed(1)}`;
+}
+
+function formatOpened(value: string | Date) {
+  const date = new Date(value);
+  return {
+    date: date.toLocaleDateString(undefined, {
+      month: "short",
+      day: "numeric",
+      year: "numeric",
+    }),
+    time: date.toLocaleTimeString(undefined, {
+      hour: "numeric",
+      minute: "2-digit",
+    }),
+  };
+}
+
+function formatFilterDate(value: string) {
+  const date = new Date(`${value}T00:00:00`);
+  if (Number.isNaN(date.getTime())) return value;
+  return date.toLocaleDateString(undefined, {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  });
+}
+
+function truncateText(value: string, maxLength: number) {
+  if (value.length <= maxLength) return value;
+  return `${value.slice(0, maxLength).trimEnd()}...`;
+}
+
+function assetGlyph(asset: string) {
+  const normalized = asset.toUpperCase();
+  if (normalized === "BTC") return "B";
+  if (normalized === "ETH") return "E";
+  return normalized.slice(0, 2);
+}
+
+function assetTone(asset: string) {
+  const normalized = asset.toUpperCase();
+  if (normalized === "BTC") return "bg-[#fff3df] text-[#b56200]";
+  if (normalized === "ETH") return "bg-[#eef1ff] text-[#4f46e5]";
+  return "bg-[#f2f4f7] text-[#475467]";
 }

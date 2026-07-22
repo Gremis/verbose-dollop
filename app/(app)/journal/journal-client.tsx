@@ -13,7 +13,6 @@ import Modal from "@/components/ui/Modal";
 import { MoneyField } from "@/components/form/MaskedFields";
 import JournalToolbar from "@/components/journal/JournalToolbar";
 import JournalSummaryCards from "@/components/journal/JournalSummaryCards";
-import JournalFilterBar from "@/components/journal/JournalFilterBar";
 import JournalTradesCard from "@/components/journal/JournalTradesCard";
 import ExportModal from "@/components/journal/ExportModal";
 import DeleteEntryModal from "@/components/journal/DeleteEntryModal";
@@ -21,11 +20,12 @@ import QuickCloseModal from "@/components/journal/QuickCloseModal";
 import FirstRunJournalModal from "@/components/journal/FirstRunJournalModal";
 import JournalFooter from "@/components/journal/JournalFooter";
 import ManageJournalsModal from "@/components/journal/ManageJournalsModal";
-import { calcProfitFactor, profitFactorLabel } from "@/lib/trade-helpers";
 
 type TradeType = 1 | 2;
 type Status = "in_progress" | "win" | "loss" | "break_even";
 type Side = "buy" | "sell" | "long" | "short";
+type StatusFilter = "all" | "open" | "win" | "loss";
+type DirectionFilter = "all" | "long" | "short";
 
 export type JournalRow = {
   id: string;
@@ -52,6 +52,7 @@ type JournalForm = {
   asset_name: string;
   trade_type: TradeType | string;
   trade_datetime: string;
+  closed_datetime?: string;
 
   trading_fee?: string;
   amount_spent?: string;
@@ -89,7 +90,7 @@ type JournalApiItem = Omit<JournalRow, "trading_fee"> & {
   tags?: string[];
 };
 
-type JournalIndexResponse = { items: JournalApiItem[] };
+type JournalIndexResponse = { items: JournalApiItem[]; journalId?: string };
 
 function toLocalInputValue(dt: string | Date) {
   const d = new Date(dt);
@@ -138,6 +139,19 @@ function parseDecimal(input: string | number | null | undefined): number {
   return /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(s) ? Number(s) : NaN;
 }
 
+async function readErrorMessage(response: Response, fallback: string) {
+  const body = await response.text();
+  if (!body.trim()) return fallback;
+
+  try {
+    const parsed = JSON.parse(body) as { error?: unknown };
+    if (typeof parsed.error === "string" && parsed.error.trim()) {
+      return parsed.error;
+    }
+  } catch {}
+
+  return body;
+}
 
 function decimalOrZero(input: string | number | null | undefined): number {
   const n = parseDecimal(input ?? "");
@@ -148,12 +162,27 @@ function toNum(input: string | number | null | undefined): number {
   return parseDecimal(input ?? "");
 }
 
-const money2 = (n: number) => `$${n.toFixed(2)}`;
+const money2 = (n: number) => `$${n.toFixed(3)}`;
 const DEFAULT_NEW_TAG_COLOR = "#7C3AED";
+
+function getDefaultJournalRange() {
+  const end = new Date();
+  const start = new Date(end);
+  start.setMonth(start.getMonth() - 6);
+  start.setHours(0, 0, 0, 0);
+  end.setHours(23, 59, 59, 999);
+
+  return {
+    start: start.toISOString().slice(0, 10),
+    end: end.toISOString().slice(0, 10),
+  };
+}
 
 type BasePayload = {
   asset_name: string;
   trade_datetime: string;
+  closed_at: string | null;
+  journal_id?: string;
   side: Side;
   status: Status;
   amount_spent: number;
@@ -170,33 +199,25 @@ type BasePayload = {
 type CreateSpotPayload = BasePayload & { trade_type: 1 };
 type CreateFuturesPayload = BasePayload & { trade_type: 2 };
 type CreatePayload = CreateSpotPayload | CreateFuturesPayload;
+type MovedOutBanner = { message: string; date: string };
 
 export default function JournalPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [items, setItems] = useState<JournalRow[]>([]);
+  const loadSeqRef = useRef(0);
 
-  const [start, setStart] = useState<string>(() => {
-    const end = new Date();
-    const s = new Date(new Date().setMonth(end.getMonth() - 6));
-    s.setHours(0, 0, 0, 0);
-    return s.toISOString().slice(0, 10);
-  });
-  const [end, setEnd] = useState<string>(() => {
-    const d = new Date();
-    d.setHours(23, 59, 59, 999);
-    return d.toISOString().slice(0, 10);
-  });
+  const [start, setStart] = useState<string>(() => getDefaultJournalRange().start);
+  const [end, setEnd] = useState<string>(() => getDefaultJournalRange().end);
 
-  const [movedOutBanner, setMovedOutBanner] = useState<string | null>(null);
+  const [movedOutBanner, setMovedOutBanner] =
+    useState<MovedOutBanner | null>(null);
 
   const [query, setQuery] = useState("");
-  const [sort, setSort] = useState<"new" | "az" | "za" | "tag_az" | "tag_za">("new");
-  const [showMenu, setShowMenu] = useState(false);
-
-  const [assetFilter, setAssetFilter] = useState("");
-  const [directionFilter, setDirectionFilter] = useState<"all" | "long" | "short">("all");
-  const [statusSegment, setStatusSegment] = useState<"all" | "open" | "wins" | "losses">("all");
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [directionFilter, setDirectionFilter] =
+    useState<DirectionFilter>("all");
+  const [assetFilter, setAssetFilter] = useState("all");
 
   const [open, setOpen] = useState(false);
   const [mode, setMode] = useState<"create" | "edit">("create");
@@ -221,7 +242,6 @@ export default function JournalPage() {
   const [tagsError, setTagsError] = useState<string | null>(null);
   const [tagQuery, setTagQuery] = useState("");
   const [showTagMenu, setShowTagMenu] = useState(false);
-  const [selectedTagName, setSelectedTagName] = useState("");
 
   const {
     register,
@@ -237,6 +257,7 @@ export default function JournalPage() {
       asset_name: "",
       trade_type: 1,
       trade_datetime: toLocalInputValue(new Date()),
+      closed_datetime: "",
       trading_fee: "0",
       notes_entry: "",
       notes_review: "",
@@ -254,12 +275,13 @@ export default function JournalPage() {
   const amountSyncRef = useRef<"amount_spent" | "amount" | null>(null);
 
   const [journals, setJournals] = useState<JournalSummary[]>([]);
+  const [journalsLoaded, setJournalsLoaded] = useState(false);
   const [activeJournalId, setActiveJournalId] = useState<string | null>(null);
   const [activeJournalName, setActiveJournalName] = useState<string>("");
   const [manageJournalsOpen, setManageJournalsOpen] = useState(false);
-  const [pendingJournalAction, setPendingJournalAction] = useState<string | null>(
-    null,
-  );
+  const [pendingJournalAction, setPendingJournalAction] = useState<
+    string | null
+  >(null);
   const [manageJournalsError, setManageJournalsError] = useState<string | null>(
     null,
   );
@@ -297,7 +319,7 @@ export default function JournalPage() {
       if (!r.ok) throw new Error(await r.text());
 
       const data = (await r.json()) as { items?: Tag[] } | Tag[];
-      const list = Array.isArray(data) ? data : data.items ?? [];
+      const list = Array.isArray(data) ? data : (data.items ?? []);
 
       setAvailableTags(list);
     } catch {
@@ -368,19 +390,19 @@ export default function JournalPage() {
     void loadTagsList();
   }, []);
 
-useEffect(() => {
-  if (typeof window === "undefined") return;
-  if (loading) return;
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (loading) return;
+    if (!journalsLoaded) return;
 
-  if (journals.length === 0) {
-    setFirstRunName("");
-    setFirstRunOpen(true);
-    return;
-  }
+    if (journals.length === 0) {
+      setFirstRunName("");
+      setFirstRunOpen(true);
+      return;
+    }
 
-  setFirstRunOpen(false);
-}, [loading, journals.length]);
-
+    setFirstRunOpen(false);
+  }, [journalsLoaded, loading, journals.length]);
 
   useEffect(() => {
     const cur = watch("side") as Side | undefined;
@@ -460,24 +482,6 @@ useEffect(() => {
     }).toString();
   }
 
-  function resetToLast6Months() {
-    const now = new Date();
-    const s = new Date(new Date().setMonth(now.getMonth() - 6));
-    s.setHours(0, 0, 0, 0);
-
-    const startYMD = s.toISOString().slice(0, 10);
-    const endYMD = now.toISOString().slice(0, 10);
-
-    setStart(startYMD);
-    setEnd(endYMD);
-
-    try {
-      localStorage.removeItem("jrnl.range");
-    } catch {}
-
-    void load();
-  }
-
   function normalizeJournal(it: JournalApiItem): JournalRow {
     const unifiedFee =
       (it.trading_fee ?? null) != null
@@ -507,40 +511,58 @@ useEffect(() => {
     };
   }
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (range?: { start: string; end: string }) => {
+    const requestId = ++loadSeqRef.current;
+    const rangeStart = range?.start ?? start;
+    const rangeEnd = range?.end ?? end;
+
     try {
       setLoading(true);
       setError(null);
       setMovedOutBanner(null);
+      setJournalsLoaded(false);
 
-      const qs = buildRangeQS(start, end);
-      const [jr, jn] = await Promise.all([
-        fetch(`/api/journal?${qs}`, { cache: "no-store" }),
-        fetch(`/api/journals`, { cache: "no-store" }),
-      ]);
+      const jn = await fetch(`/api/journals`, { cache: "no-store" });
+      if (!jn.ok) throw new Error(await jn.text());
+      const jnPayload = (await jn.json()) as JournalsPayload;
+      if (requestId !== loadSeqRef.current) return [];
 
+      const list = jnPayload.items ?? [];
+      const activeId = jnPayload.activeJournalId ?? null;
+      setJournals(list);
+      setActiveJournalId(activeId);
+      setJournalsLoaded(true);
+
+      const name = list.find((x) => x.id === (activeId ?? ""))?.name ?? "";
+      setActiveJournalName(name);
+
+      const params = new URLSearchParams(buildRangeQS(rangeStart, rangeEnd));
+      if (activeId) params.set("journal_id", activeId);
+      const jr = await fetch(`/api/journal?${params.toString()}`, {
+        cache: "no-store",
+      });
       if (!jr.ok) throw new Error(await jr.text());
 
       const j: JournalIndexResponse = await jr.json();
-      setItems((j.items ?? []).map(normalizeJournal));
+      if (requestId !== loadSeqRef.current) return [];
 
-      if (!jn.ok) throw new Error(await jn.text());
-      const jnPayload = (await jn.json()) as JournalsPayload;
-      const list = jnPayload.items ?? [];
-      setJournals(list);
-      setActiveJournalId(jnPayload.activeJournalId ?? null);
+      if (j.journalId && j.journalId !== activeId) {
+        setActiveJournalId(j.journalId);
+        setActiveJournalName(
+          list.find((x) => x.id === j.journalId)?.name ?? "",
+        );
+      }
 
-      const name =
-        list.find((x) => x.id === (jnPayload.activeJournalId ?? ""))?.name ??
-        "";
-      setActiveJournalName(name);
+      const normalized = (j.items ?? []).map(normalizeJournal);
+      setItems(normalized);
 
-      return (j.items ?? []).map(normalizeJournal);
+      return normalized;
     } catch (e) {
+      if (requestId !== loadSeqRef.current) return [];
       setError(e instanceof Error ? e.message : "Failed to load journal");
       return [];
     } finally {
-      setLoading(false);
+      if (requestId === loadSeqRef.current) setLoading(false);
     }
   }, [start, end]);
 
@@ -562,7 +584,7 @@ useEffect(() => {
     if (assetName) {
       const candidates = items
         .filter(
-          (r) => r.trade_type === 1 && r.asset_name.toUpperCase() === assetName
+          (r) => r.trade_type === 1 && r.asset_name.toUpperCase() === assetName,
         )
         .sort((a, b) => +new Date(b.date) - +new Date(a.date));
 
@@ -585,90 +607,48 @@ useEffect(() => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchParams, loading, items, handledFromPortfolio, setValue]);
 
-  useEffect(() => {
-    try {
-      const saved = JSON.parse(localStorage.getItem("jrnl.range") || "{}");
-      if (saved.start) setStart(saved.start);
-      if (saved.end) setEnd(saved.end);
-    } catch {}
-  }, []);
-
-  function handleStartChange(value: string) {
-    setStart(value);
-    try {
-      localStorage.setItem("jrnl.range", JSON.stringify({ start: value, end }));
-    } catch {}
-  }
-
-  function handleEndChange(value: string) {
-    setEnd(value);
-    try {
-      localStorage.setItem("jrnl.range", JSON.stringify({ start, end: value }));
-    } catch {}
-  }
-
-  const assetNameOptions = useMemo(
-    () => Array.from(new Set(items.map((i) => i.asset_name))).sort(),
-    [items],
-  );
-
   const rows = useMemo(() => {
     let arr = items;
     const q = query.trim().toLowerCase();
     if (q)
       arr = arr.filter((i) =>
-        `${i.asset_name} ${i.status} ${i.side} ${(i.tags ?? []).join(" ")}`
+        `${i.asset_name} ${i.status} ${i.side} ${(i.tags ?? []).join(" ")} ${i.notes_entry ?? ""} ${i.notes_review ?? ""}`
           .toLowerCase()
-          .includes(q)
+          .includes(q),
       );
-    if (selectedTagName) {
-      arr = arr.filter((i) => (i.tags ?? []).includes(selectedTagName));
-    }
-    if (assetFilter) {
-      arr = arr.filter((i) => i.asset_name === assetFilter);
+    if (assetFilter !== "all") {
+      arr = arr.filter((i) => i.asset_name.toUpperCase() === assetFilter);
     }
     if (directionFilter !== "all") {
-      const longSides = ["buy", "long"];
-      arr = arr.filter(
-        (i) => (longSides.includes(i.side) ? "long" : "short") === directionFilter,
-      );
+      arr = arr.filter((i) => {
+        const longLike = i.side === "buy" || i.side === "long";
+        return directionFilter === "long" ? longLike : !longLike;
+      });
     }
-    if (statusSegment === "open") {
-      arr = arr.filter((i) => i.status === "in_progress");
-    } else if (statusSegment === "wins") {
-      arr = arr.filter((i) => i.status === "win");
-    } else if (statusSegment === "losses") {
-      arr = arr.filter((i) => i.status === "loss");
+    if (statusFilter !== "all") {
+      arr = arr.filter((i) => {
+        if (statusFilter === "open") return i.status === "in_progress";
+        return i.status === statusFilter;
+      });
     }
-    switch (sort) {
-      case "az":
-        return [...arr].sort((a, b) =>
-          a.asset_name.localeCompare(b.asset_name)
-        );
-      case "za":
-        return [...arr].sort((a, b) =>
-          b.asset_name.localeCompare(a.asset_name)
-        );
-      case "tag_az":
-        return [...arr].sort((a, b) =>
-          ((a.tags ?? [])[0] ?? "").localeCompare((b.tags ?? [])[0] ?? "")
-        );
-      case "tag_za":
-        return [...arr].sort((a, b) =>
-          ((b.tags ?? [])[0] ?? "").localeCompare((a.tags ?? [])[0] ?? "")
-        );
-      default:
-        return [...arr].sort((a, b) => +new Date(b.date) - +new Date(a.date));
-    }
-  }, [
-    items,
-    query,
-    sort,
-    selectedTagName,
-    assetFilter,
-    directionFilter,
-    statusSegment,
-  ]);
+    return [...arr].sort((a, b) => +new Date(b.date) - +new Date(a.date));
+  }, [items, query, assetFilter, directionFilter, statusFilter]);
+
+  function updateDateRange(next: { start?: string; end?: string }) {
+    const nextStart = next.start ?? start;
+    const nextEnd = next.end ?? end;
+
+    setStart(nextStart);
+    setEnd(nextEnd);
+    setMovedOutBanner(null);
+  }
+
+  async function showTradeDate(date: string) {
+    setStart(date);
+    setEnd(date);
+    setMovedOutBanner(null);
+    await load({ start: date, end: date });
+  }
 
   function openCreate() {
     setMode("create");
@@ -688,6 +668,7 @@ useEffect(() => {
       asset_name: "",
       trade_type: 1,
       trade_datetime: toLocalInputValue(new Date()),
+      closed_datetime: "",
       amount: "",
       notes_entry: "",
       notes_review: "",
@@ -719,6 +700,7 @@ useEffect(() => {
       asset_name: row.asset_name,
       trade_type: row.trade_type,
       trade_datetime: toLocalInputValue(row.date),
+      closed_datetime: row.closed_at ? toLocalInputValue(row.closed_at) : "",
       side: row.side,
       status: row.status,
       amount_spent: String(row.amount_spent),
@@ -751,7 +733,11 @@ useEffect(() => {
     try {
       setDeleting(true);
       const r = await fetch(`/api/journal/${deleteId}`, { method: "DELETE" });
-      if (!r.ok) throw new Error(await r.text());
+      if (!r.ok) {
+        throw new Error(
+          await readErrorMessage(r, `Failed to delete trade (${r.status})`),
+        );
+      }
       setConfirmOpen(false);
       setDeleteId(null);
       await load();
@@ -765,11 +751,7 @@ useEffect(() => {
 
   async function validateAndNext() {
     if (wizardStep === 1) {
-      const ok = await trigger([
-        "asset_name",
-        "trade_type",
-        "trade_datetime",
-      ]);
+      const ok = await trigger(["asset_name", "trade_type", "trade_datetime"]);
       if (ok) setWizardStep(2);
       return;
     }
@@ -823,6 +805,13 @@ useEffect(() => {
       setTargets && form.stop_loss_price && form.stop_loss_price.trim()
         ? toNum(form.stop_loss_price)
         : null;
+    const status = (form.status ?? "in_progress") as Status;
+    const closedAt =
+      status === "in_progress"
+        ? null
+        : form.closed_datetime?.trim()
+          ? toISO(form.closed_datetime)
+          : new Date().toISOString();
 
     if (!(amt > 0) || !(entry > 0) || !(fee >= 0)) {
       alert("Please enter valid numbers (you can use commas).");
@@ -853,8 +842,10 @@ useEffect(() => {
     const base: BasePayload = {
       asset_name: form.asset_name,
       trade_datetime: toISO(form.trade_datetime),
+      closed_at: closedAt,
+      journal_id: activeJournalId ?? undefined,
       side: coercedSide,
-      status: (form.status ?? "in_progress") as Status,
+      status,
       amount_spent: amt,
       entry_price: entry,
       exit_price: exit,
@@ -884,15 +875,9 @@ useEffect(() => {
       body: JSON.stringify(payload),
     });
     if (!r.ok) {
-      const body = await r.text();
-      let msg = body;
-      try {
-        const parsed = JSON.parse(body) as { error?: unknown };
-        if (typeof parsed.error === "string" && parsed.error.trim()) {
-          msg = parsed.error;
-        }
-      } catch {}
-      throw new Error(msg || `Failed to save trade (${r.status})`);
+      throw new Error(
+        await readErrorMessage(r, `Failed to save trade (${r.status})`),
+      );
     }
 
     if (method === "PUT" && editingId) {
@@ -901,6 +886,7 @@ useEffect(() => {
         status: Status;
         exit_price: number | null;
         trading_fee: number;
+        closed_at: string | null;
       };
       const saved: PutReturn = await r.json();
 
@@ -911,13 +897,17 @@ useEffect(() => {
                 ...it,
                 status: saved.status ?? it.status,
                 exit_price: saved.exit_price ?? it.exit_price,
+                closed_at:
+                  typeof saved.closed_at === "string"
+                    ? saved.closed_at
+                    : (closedAt ?? it.closed_at),
                 trading_fee:
                   typeof saved.trading_fee === "number"
                     ? saved.trading_fee
                     : it.trading_fee,
               }
-            : it
-        )
+            : it,
+        ),
       );
     } else {
       await r.json().catch(() => undefined);
@@ -926,14 +916,15 @@ useEffect(() => {
     const savedYMD = (form.trade_datetime || "").slice(0, 10);
 
     if (savedYMD < start || savedYMD > end) {
-      setStart(savedYMD);
-      setEnd(savedYMD);
       await load();
+      setMovedOutBanner({
+        date: savedYMD,
+        message: `Trade saved for ${savedYMD}, outside the current date range.`,
+      });
     } else {
       await load();
+      setMovedOutBanner(null);
     }
-
-    setMovedOutBanner(null);
   }
 
   const onSubmit = async (form: JournalForm) => {
@@ -945,89 +936,94 @@ useEffect(() => {
     }
   };
 
-const STABLE_SUFFIXES = ["USDT", "USDC", "BUSD", "TUSD", "DAI", "USD"] as const;
+  const STABLE_SUFFIXES = [
+    "USDT",
+    "USDC",
+    "BUSD",
+    "TUSD",
+    "DAI",
+    "USD",
+  ] as const;
 
-function isPureAssetSymbol(symbolRaw: string) {
-  const s = (symbolRaw ?? "").trim().toUpperCase();
+  function isPureAssetSymbol(symbolRaw: string) {
+    const s = (symbolRaw ?? "").trim().toUpperCase();
 
-  if (!s) return false;
-  if (s.includes("/") || s.includes("-") || s.includes("_")) return false;
+    if (!s) return false;
+    if (s.includes("/") || s.includes("-") || s.includes("_")) return false;
 
-  for (const suf of STABLE_SUFFIXES) {
-    if (s.length > suf.length && s.endsWith(suf)) return false;
+    for (const suf of STABLE_SUFFIXES) {
+      if (s.length > suf.length && s.endsWith(suf)) return false;
+    }
+
+    if (!/^[A-Z0-9]{2,15}$/.test(s)) return false;
+
+    return true;
   }
 
-  if (!/^[A-Z0-9]{2,15}$/.test(s)) return false;
+  async function fetchAssets(q: string) {
+    try {
+      setAssetError(null);
 
-  return true;
-}
+      const cleaned = q.trim();
+      if (cleaned.length < 1) {
+        setAssetOptions([]);
+        setShowAssetMenu(false);
+        validSymbolsRef.current = new Set();
+        return;
+      }
 
-async function fetchAssets(q: string) {
-  try {
-    setAssetError(null);
+      const r = await fetch(
+        `/api/assets/coins?q=${encodeURIComponent(cleaned)}`,
+      );
+      if (!r.ok) throw new Error("Lookup failed");
 
-    const cleaned = q.trim();
-    if (cleaned.length < 1) {
+      const data = (await r.json()) as { items: AssetOption[] };
+      const all = data.items ?? [];
+
+      const filtered = all.filter((i) => isPureAssetSymbol(i.symbol));
+
+      setAssetOptions(filtered);
+      validSymbolsRef.current = new Set(
+        filtered.map((i) => i.symbol.toUpperCase()),
+      );
+      setShowAssetMenu(filtered.length > 0);
+    } catch {
+      setAssetError("Could not load assets");
       setAssetOptions([]);
       setShowAssetMenu(false);
       validSymbolsRef.current = new Set();
-      return;
     }
-
-    const r = await fetch(`/api/assets/coins?q=${encodeURIComponent(cleaned)}`);
-    if (!r.ok) throw new Error("Lookup failed");
-
-    const data = (await r.json()) as { items: AssetOption[] };
-    const all = data.items ?? [];
-
-    const filtered = all.filter((i) => isPureAssetSymbol(i.symbol));
-
-    setAssetOptions(filtered);
-    validSymbolsRef.current = new Set(filtered.map((i) => i.symbol.toUpperCase()));
-    setShowAssetMenu(filtered.length > 0);
-  } catch {
-    setAssetError("Could not load assets");
-    setAssetOptions([]);
-    setShowAssetMenu(false);
-    validSymbolsRef.current = new Set();
   }
-}
 
   const totalTrades = rows.length;
   const finished = rows.filter((r) => r.status !== "in_progress");
-  const winCount = finished.filter((r) => r.status === "win").length;
-  const lossCount = finished.filter((r) => r.status === "loss").length;
-  const openCount = rows.length - finished.length;
   const winRate = finished.length
-    ? Math.round((winCount * 100) / finished.length)
+    ? Math.round(
+        (finished.filter((i) => i.status === "win").length * 100) /
+          finished.length,
+      )
     : 0;
 
-  const netPnl = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
-  const profitFactor = calcProfitFactor(finished.map((r) => r.pnl));
-  const pfLabel = profitFactorLabel(profitFactor);
-  const avgPositionSize = rows.length
+  const earnings = rows.reduce((acc, r) => acc + (r.pnl ?? 0), 0);
+  const grossProfit = finished.reduce(
+    (acc, r) => acc + Math.max(r.pnl ?? 0, 0),
+    0,
+  );
+  const grossLoss = Math.abs(
+    finished.reduce((acc, r) => acc + Math.min(r.pnl ?? 0, 0), 0),
+  );
+  const profitFactor = grossLoss > 0 ? grossProfit / grossLoss : null;
+  const openTrades = rows.filter((r) => r.status === "in_progress").length;
+  const averagePositionSize = rows.length
     ? rows.reduce((acc, r) => acc + r.amount_spent, 0) / rows.length
     : 0;
-
-  function renderStatusButton(r: JournalRow) {
-    const config =
-      r.status === "in_progress"
-        ? { label: "Open", className: "text-amber-700 bg-amber-50" }
-        : r.status === "win"
-          ? { label: "Win", className: "text-emerald-700 bg-emerald-50" }
-          : r.status === "loss"
-            ? { label: "Loss", className: "text-red-700 bg-red-50" }
-            : { label: "Break even", className: "text-gray-600 bg-gray-100" };
-
-    return (
-      <span
-        className={`inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-[11px] font-bold ${config.className}`}
-      >
-        <span className="h-[7px] w-[7px] rounded-full bg-current" />
-        {config.label}
-      </span>
-    );
-  }
+  const assets = useMemo(
+    () =>
+      Array.from(new Set(items.map((item) => item.asset_name.toUpperCase())))
+        .filter(Boolean)
+        .sort((a, b) => a.localeCompare(b)),
+    [items],
+  );
 
   function toggleRow(id: string) {
     setExpandedRowId((prev) => (prev === id ? null : id));
@@ -1053,7 +1049,8 @@ async function fetchAssets(q: string) {
     try {
       setClosing(true);
       const longLike = rowToClose.side === "buy" || rowToClose.side === "long";
-      const change = (exitNum - rowToClose.entry_price) / rowToClose.entry_price;
+      const change =
+        (exitNum - rowToClose.entry_price) / rowToClose.entry_price;
       const notional = rowToClose.amount_spent;
 
       const gross = (longLike ? 1 : -1) * notional * change;
@@ -1070,6 +1067,7 @@ async function fetchAssets(q: string) {
       const baseClose: BasePayload = {
         asset_name: rowToClose.asset_name,
         trade_datetime: toISO(toLocalInputValue(rowToClose.date)),
+        closed_at: new Date().toISOString(),
         side: rowToClose.side,
         status: computedStatus,
         amount_spent: rowToClose.amount_spent,
@@ -1102,13 +1100,17 @@ async function fetchAssets(q: string) {
                 ...it,
                 status: saved.status ?? it.status,
                 exit_price: saved.exit_price ?? it.exit_price,
+                closed_at:
+                  typeof saved.closed_at === "string"
+                    ? saved.closed_at
+                    : (baseClose.closed_at ?? it.closed_at),
                 trading_fee:
                   typeof saved.trading_fee === "number"
                     ? saved.trading_fee
                     : it.trading_fee,
               }
-            : it
-        )
+            : it,
+        ),
       );
       setCloseOpen(false);
       await load();
@@ -1244,6 +1246,12 @@ async function fetchAssets(q: string) {
     }
   }
 
+  async function openManageJournals() {
+    setManageJournalsError(null);
+    await load();
+    setManageJournalsOpen(true);
+  }
+
   function renderTargetsSection() {
     return (
       <>
@@ -1288,8 +1296,9 @@ async function fetchAssets(q: string) {
   function renderTagsSection() {
     const normalizedQuery = tagQuery.trim().toLowerCase();
     const selectedTags = new Set(wTags.map((tag: string) => tag.toLowerCase()));
-    const unselectedTags = availableTags
-      .filter((tag) => !selectedTags.has(tag.name.toLowerCase()))
+    const unselectedTags = availableTags.filter(
+      (tag) => !selectedTags.has(tag.name.toLowerCase()),
+    );
     const filteredTags = normalizedQuery
       ? unselectedTags
           .filter((tag) => tag.name.toLowerCase().includes(normalizedQuery))
@@ -1308,7 +1317,9 @@ async function fetchAssets(q: string) {
     const selectionFull = wTags.length >= 10;
 
     function addTag(name: string) {
-      if (wTags.some((tag: string) => tag.toLowerCase() === name.toLowerCase())) {
+      if (
+        wTags.some((tag: string) => tag.toLowerCase() === name.toLowerCase())
+      ) {
         setTagQuery("");
         return;
       }
@@ -1465,7 +1476,12 @@ async function fetchAssets(q: string) {
       <JournalToolbar
         activeJournalName={activeJournalName}
         movedOutBanner={movedOutBanner}
-        onOpenManageJournals={() => setManageJournalsOpen(true)}
+        onShowMovedOutTrade={(date) => {
+          void showTradeDate(date);
+        }}
+        onOpenManageJournals={() => {
+          void openManageJournals();
+        }}
         onOpenExport={() => setExportOpen(true)}
         onOpenCreate={openCreate}
       />
@@ -1473,52 +1489,38 @@ async function fetchAssets(q: string) {
       <JournalSummaryCards
         totalTrades={totalTrades}
         winRate={winRate}
-        winCount={winCount}
-        lossCount={lossCount}
-        openCount={openCount}
-        netPnl={netPnl}
+        earnings={earnings}
         profitFactor={profitFactor}
-        profitFactorLabel={pfLabel}
-        avgPositionSize={avgPositionSize}
-      />
-
-      <JournalFilterBar
-        query={query}
-        onQueryChange={setQuery}
-        start={start}
-        end={end}
-        onStartChange={handleStartChange}
-        onEndChange={handleEndChange}
-        assetOptions={assetNameOptions}
-        assetFilter={assetFilter}
-        onAssetFilterChange={setAssetFilter}
-        directionFilter={directionFilter}
-        onDirectionFilterChange={setDirectionFilter}
-        statusSegment={statusSegment}
-        onStatusSegmentChange={setStatusSegment}
+        openTrades={openTrades}
+        averagePositionSize={averagePositionSize}
       />
 
       <JournalTradesCard
         loading={loading}
         error={error}
         rows={rows}
-        showMenu={showMenu}
+        query={query}
+        start={start}
+        end={end}
         availableTags={availableTags}
-        selectedTagName={selectedTagName}
+        statusFilter={statusFilter}
+        directionFilter={directionFilter}
+        assetFilter={assetFilter}
+        assets={assets}
         expandedRowId={expandedRowId}
-        onToggleMenu={() => setShowMenu((m) => !m)}
-        onCloseMenu={() => setShowMenu(false)}
-        onSortChange={setSort}
-        onSelectedTagChange={setSelectedTagName}
+        onQueryChange={setQuery}
+        onStartChange={(value) => updateDateRange({ start: value })}
+        onEndChange={(value) => updateDateRange({ end: value })}
+        onStatusFilterChange={setStatusFilter}
+        onDirectionFilterChange={setDirectionFilter}
+        onAssetFilterChange={setAssetFilter}
         onRefresh={() => {
           void load();
         }}
-        onResetRange={resetToLast6Months}
         onToggleRow={toggleRow}
         onOpenCloseModal={openCloseModal}
         onOpenEdit={openEdit}
         onAskDelete={askDelete}
-        renderStatusButton={renderStatusButton}
         fmt4={fmt4}
         money2={money2}
       />
@@ -1595,7 +1597,6 @@ async function fetchAssets(q: string) {
                       if (assetOptions.length > 0) setShowAssetMenu(true);
                     }}
                     placeholder="e.g. BTC"
-
                     className="w-full rounded-xl border border-gray-200 px-3 py-2"
                   />
                   {showAssetMenu && (
@@ -1684,7 +1685,6 @@ async function fetchAssets(q: string) {
 
                 <hr className="my-2 border-gray-200" />
                 {renderTagsSection()}
-
               </>
             )}
 
@@ -1945,6 +1945,17 @@ async function fetchAssets(q: string) {
                       )}
                     </div>
                   </>
+                )}
+
+                {wStatus && wStatus !== "in_progress" && (
+                  <div>
+                    <div className="text-sm mb-1">Date & Time Closed</div>
+                    <input
+                      type="datetime-local"
+                      {...register("closed_datetime")}
+                      className="w-full rounded-xl border border-gray-200 px-3 py-2"
+                    />
+                  </div>
                 )}
 
                 {wTradeType === 2 && renderTargetsSection()}

@@ -1,163 +1,128 @@
 import React from "react";
-import Card from "@/components/ui/Card";
 
 type JournalSummaryCardsProps = {
   totalTrades: number;
   winRate: number;
-  winCount: number;
-  lossCount: number;
-  openCount: number;
-  netPnl: number;
+  earnings: number;
   profitFactor: number | null;
-  profitFactorLabel: "Dangerous" | "Acceptable" | "Optimal" | null;
-  avgPositionSize: number;
+  openTrades: number;
+  averagePositionSize: number;
 };
 
-function TrendUpIcon() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M4 17 10 11l4 4 6-8" />
-      <path d="M15 7h5v5" />
-    </svg>
-  );
-}
+export default function JournalSummaryCards({
+  totalTrades,
+  winRate,
+  earnings,
+  profitFactor,
+  openTrades,
+  averagePositionSize,
+}: JournalSummaryCardsProps) {
+  const earningsLabel = `${earnings >= 0 ? "+" : "-"}$${Math.abs(earnings).toFixed(2)}`;
+  const averagePositionLabel = new Intl.NumberFormat("en-US", {
+    maximumFractionDigits: 0,
+  }).format(averagePositionSize);
+  const profitFactorLabel =
+    profitFactor == null || !Number.isFinite(profitFactor)
+      ? "-"
+      : profitFactor.toFixed(2);
+  const profitHealth =
+    profitFactor == null
+      ? "No closed losses"
+      : profitFactor < 1.2
+        ? "Dangerous"
+        : profitFactor < 1.6
+          ? "Acceptable"
+          : "Optimal";
 
-function CheckCircleIcon() {
   return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <circle cx="12" cy="12" r="8" />
-      <path d="m8.5 12 2.3 2.3L16 9" />
-    </svg>
-  );
-}
-
-function BarsIcon() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M4 18V9M10 18V5M16 18v-7M22 18H2" />
-    </svg>
-  );
-}
-
-function BriefcaseIcon() {
-  return (
-    <svg width="19" height="19" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
-      <path d="M4 7h16M7 4v6M17 4v6M5 12h14v8H5z" />
-    </svg>
+    <div className="grid gap-4 lg:grid-cols-4 md:grid-cols-2">
+      <MetricCard
+        label="Net P&L"
+        value={earningsLabel}
+        helper="Total PnL of this journal"
+        tone="green"
+        iconPath="M4 17 10 11l4 4 6-8M15 7h5v5"
+        valueClassName={earnings >= 0 ? "text-[#11895a]" : "text-[#d83a52]"}
+      />
+      <MetricCard
+        label="Win rate"
+        value={`${winRate}%`}
+        helper={`${totalTrades - openTrades} closed trades`}
+        foot={`${openTrades} open`}
+        tone="indigo"
+        iconPath="M12 20a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm-3.5-8 2.3 2.3L16 9"
+      />
+      <MetricCard
+        label="Profit factor"
+        value={profitFactorLabel}
+        helper="Gross profit ÷ gross loss"
+        foot={profitHealth}
+        tone="blue"
+        iconPath="M4 18V9M10 18V5M16 18v-7M22 18H2"
+      />
+      <MetricCard
+        label="Total trades"
+        value={String(totalTrades)}
+        helper={`Average size $${averagePositionLabel}`}
+        foot={`${openTrades} open`}
+        tone="amber"
+        iconPath="M4 7h16M7 4v6M17 4v6M5 12h14v8H5z"
+      />
+    </div>
   );
 }
 
 function MetricCard({
   label,
-  icon,
-  iconClassName,
   value,
-  valueClassName = "",
   helper,
-  change,
+  foot,
+  tone,
+  iconPath,
+  valueClassName = "text-[#152033]",
 }: {
   label: string;
-  icon: React.ReactNode;
-  iconClassName: string;
-  value: React.ReactNode;
+  value: string;
+  helper: string;
+  foot?: string;
+  tone: "green" | "indigo" | "blue" | "amber";
+  iconPath: string;
   valueClassName?: string;
-  helper: React.ReactNode;
-  change?: React.ReactNode;
 }) {
-  return (
-    <Card className="relative min-h-[146px] overflow-hidden">
-      <div className="pointer-events-none absolute -right-[18px] -top-[22px] h-[92px] w-[92px] rounded-full border border-gray-100 bg-gray-50" />
+  const tones = {
+    green: "bg-[#eaf8f1] text-[#11895a]",
+    indigo: "bg-[#eef2ff] text-[#4f46e5]",
+    blue: "bg-[#eaf5ff] text-[#1479c9]",
+    amber: "bg-[#fff7e6] text-[#b76e00]",
+  };
 
-      <div className="relative flex items-center justify-between">
-        <div className="text-[13px] font-semibold text-gray-500">{label}</div>
-        <div
-          className={`relative z-[2] flex h-[38px] w-[38px] items-center justify-center rounded-[11px] ${iconClassName}`}
-        >
-          {icon}
+  return (
+    <article className="relative flex min-h-36 flex-col justify-between overflow-hidden rounded-2xl border border-[#e3e8f0] bg-white p-5 shadow-[0_1px_2px_rgba(16,24,40,.04),0_8px_24px_rgba(16,24,40,.05)]">
+      <div className="absolute -right-5 -top-6 h-24 w-24 rounded-full border border-[#edf0f5] bg-[#f8fafc]" />
+      <div className="relative z-10 flex items-center justify-between gap-4">
+        <div className="text-[13px] font-semibold text-[#667085]">{label}</div>
+        <div className={`grid h-10 w-10 place-items-center rounded-xl ${tones[tone]}`}>
+          <svg
+            aria-hidden="true"
+            className="h-5 w-5"
+            fill="none"
+            stroke="currentColor"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth="1.9"
+            viewBox="0 0 24 24"
+          >
+            <path d={iconPath} />
+          </svg>
         </div>
       </div>
-
-      <div className={`relative mt-3 text-[28px] font-bold tracking-tight ${valueClassName}`}>
+      <div className={`relative z-10 mt-3 text-3xl font-bold tracking-tight ${valueClassName}`}>
         {value}
       </div>
-
-      <div className="relative mt-2 flex items-center justify-between gap-2.5">
-        <span className="text-xs text-gray-400">{helper}</span>
-        {change}
+      <div className="relative z-10 mt-2 flex items-center justify-between gap-3 text-xs">
+        <span className="text-[#98a2b3]">{helper}</span>
+        {foot && <span className="font-bold text-[#11895a]">{foot}</span>}
       </div>
-    </Card>
-  );
-}
-
-export default function JournalSummaryCards({
-  totalTrades,
-  winRate,
-  winCount,
-  lossCount,
-  openCount,
-  netPnl,
-  profitFactor,
-  profitFactorLabel,
-  avgPositionSize,
-}: JournalSummaryCardsProps) {
-  const pfValue =
-    profitFactor == null
-      ? "—"
-      : profitFactor === Infinity
-        ? "∞"
-        : profitFactor.toFixed(2);
-
-  const pfChangeClass =
-    profitFactorLabel === "Dangerous"
-      ? "text-red-600"
-      : profitFactorLabel === "Acceptable"
-        ? "text-amber-600"
-        : "text-emerald-600";
-
-  return (
-    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
-      <MetricCard
-        label="Net P&L"
-        icon={<TrendUpIcon />}
-        iconClassName="bg-emerald-50 text-emerald-600"
-        value={`${netPnl >= 0 ? "+" : "-"}$${Math.abs(netPnl).toFixed(2)}`}
-        valueClassName={netPnl > 0 ? "text-emerald-600" : netPnl < 0 ? "text-red-600" : ""}
-        helper="Total PnL of this journal"
-      />
-
-      <MetricCard
-        label="Win rate"
-        icon={<CheckCircleIcon />}
-        iconClassName="bg-indigo-50 text-indigo-600"
-        value={`${winRate}%`}
-        helper={`${winCount} wins · ${lossCount} losses · ${openCount} open`}
-      />
-
-      <MetricCard
-        label="Profit factor"
-        icon={<BarsIcon />}
-        iconClassName="bg-blue-50 text-blue-600"
-        value={pfValue}
-        helper="Gross profit ÷ gross loss"
-        change={
-          profitFactorLabel && (
-            <span className={`text-xs font-bold ${pfChangeClass}`}>{profitFactorLabel}</span>
-          )
-        }
-      />
-
-      <MetricCard
-        label="Total trades"
-        icon={<BriefcaseIcon />}
-        iconClassName="bg-amber-50 text-amber-600"
-        value={totalTrades}
-        helper={`Average size $${avgPositionSize.toFixed(0)}`}
-        change={
-          openCount > 0 && (
-            <span className="text-xs font-bold text-emerald-600">{openCount} open</span>
-          )
-        }
-      />
-    </div>
+    </article>
   );
 }

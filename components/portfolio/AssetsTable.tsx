@@ -7,7 +7,10 @@ import { usd, pct, qty, cls } from "@/components/portfolio/format";
 import { CoinBadge } from "@/components/portfolio/CoinBadge";
 
 export type AssetRow = {
+  assetKey?: string;
   symbol: string;
+  chainId?: string | null;
+  chainName?: string | null;
   name: string | null;
   coingeckoId: string | null;
   iconUrl: string | null;
@@ -117,7 +120,7 @@ export default function AssetsTable(props: {
         <button
           type="button"
           className={cls(
-            "inline-flex items-center gap-1.5 whitespace-nowrap text-sm font-extrabold",
+            "inline-flex cursor-pointer items-center gap-1.5 whitespace-nowrap text-sm font-extrabold",
             active ? "text-[#5801cc]" : "text-[#69758a] hover:text-slate-700",
           )}
           onClick={() => setSortKey(sortKey)}
@@ -159,7 +162,7 @@ export default function AssetsTable(props: {
 
             return (
               <Tr
-                key={a.symbol}
+                key={a.assetKey ?? a.symbol}
                 onClick={() => props.onAssetClick?.(a.symbol)} // NOVO: clique na linha
                 className={cls(
                   props.onAssetClick && "cursor-pointer hover:bg-slate-50", // NOVO: visual de clicável

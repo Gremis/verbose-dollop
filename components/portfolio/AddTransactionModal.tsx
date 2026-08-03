@@ -15,6 +15,13 @@ type AssetPick = {
   change24hPct?: number | null;
 };
 
+type ChainOption = {
+  id: string;
+  name: string;
+  symbol: string;
+  color?: string;
+};
+
 type Step = "pick" | "form";
 
 type TopAssetsResponse = {
@@ -54,6 +61,9 @@ export default function AddTransactionModal(props: {
   const [query, setQuery] = useState("");
   const [results, setResults] = useState<AssetPick[]>([]);
   const [selected, setSelected] = useState<AssetPick | null>(null);
+  const [chainOptions, setChainOptions] = useState<ChainOption[]>([]);
+  const [selectedChainId, setSelectedChainId] = useState<string>("");
+  const [chainQuery, setChainQuery] = useState("");
 
   const [side, setSide] = useState<"buy" | "sell">("buy");
 
@@ -93,6 +103,9 @@ export default function AddTransactionModal(props: {
     setQuery("");
     setResults([]);
     setSelected(null);
+    setChainOptions([]);
+    setSelectedChainId("");
+    setChainQuery("");
 
     setSide("buy");
     setPriceRaw("");
@@ -131,11 +144,13 @@ export default function AddTransactionModal(props: {
     lastChanged.current = null;
 
     setSelected({
-      id: t.symbol.toLowerCase(),
+      id: t.coingeckoId ?? t.symbol.toLowerCase(),
       symbol: t.symbol,
       name: t.name ?? t.symbol,
       thumb: t.iconUrl ?? null,
     });
+    setSelectedChainId(t.chainId ?? "");
+    setChainQuery("");
   }, [props.open, mode, props.initialTx]);
 
   const loadMarketPrice = useCallback(async (id: string) => {
@@ -158,6 +173,8 @@ export default function AddTransactionModal(props: {
 
     const asset = props.initialAsset;
     setSelected(asset);
+    setSelectedChainId("");
+    setChainQuery("");
     setStep("form");
     setSide("buy");
     setPriceRaw(
@@ -176,6 +193,45 @@ export default function AddTransactionModal(props: {
       void loadMarketPrice(asset.id);
     }
   }, [loadMarketPrice, props.open, mode, props.initialAsset]);
+
+  useEffect(() => {
+    if (!props.open) return;
+    if (!selected) return;
+
+    let cancelled = false;
+    (async () => {
+      const params = new URLSearchParams({
+        id: selected.id,
+        symbol: selected.symbol,
+      });
+      if (chainQuery.trim()) {
+        params.set("q", chainQuery.trim());
+      }
+      const res = await fetch(
+        `/api/portfolio/assets/chains?${params.toString()}`,
+        { cache: "no-store" },
+      );
+      if (!res.ok) return;
+      const json = (await res.json().catch(() => null)) as {
+        defaultChainId?: string;
+        items?: ChainOption[];
+      } | null;
+      if (cancelled) return;
+
+      const options = json?.items ?? [];
+      setChainOptions(options);
+      setSelectedChainId((current) => {
+        if (current) {
+          return current;
+        }
+        return json?.defaultChainId ?? options[0]?.id ?? "other";
+      });
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [chainQuery, props.open, selected]);
 
   useEffect(() => {
     if (!props.open) return;
@@ -327,7 +383,7 @@ export default function AddTransactionModal(props: {
           <div className="flex items-center justify-between gap-3">
             {canDelete ? (
               <button
-                className="rounded-xl bg-red-500 text-white px-4 py-2 text-sm hover:bg-red-600 disabled:opacity-50"
+                className="cursor-pointer rounded-xl bg-red-500 text-white px-4 py-2 text-sm hover:bg-red-600 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => revealConfirmDeleteIfOpen(true)}
                 disabled={!canDelete}
                 type="button"
@@ -340,7 +396,7 @@ export default function AddTransactionModal(props: {
 
             <div className="flex items-center justify-end gap-3">
               <button
-                className="rounded-xl bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200 disabled:opacity-50"
+                className="cursor-pointer rounded-xl bg-gray-100 px-4 py-2 text-sm hover:bg-gray-200 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => props.onClose()}
                 disabled={busy}
                 type="button"
@@ -350,7 +406,7 @@ export default function AddTransactionModal(props: {
 
               {step === "pick" ? null : (
                 <button
-                  className="rounded-xl bg-gray-900 text-white px-4 py-2 text-sm disabled:opacity-50"
+                  className="cursor-pointer rounded-xl bg-gray-900 text-white px-4 py-2 text-sm disabled:cursor-not-allowed disabled:opacity-50"
                   disabled={!canSave}
                   onClick={async () => {
                     if (!selected) return;
@@ -368,6 +424,7 @@ export default function AddTransactionModal(props: {
                         qty?: number;
                         totalUsd?: number;
                         feeUsd: number;
+                        chainId?: string;
                         isStablecoin?: boolean;
                         executedAt: string;
                       } = {
@@ -388,6 +445,7 @@ export default function AddTransactionModal(props: {
                             ? undefined
                             : total || undefined,
                         feeUsd: fee,
+                        chainId: selectedChainId || undefined,
                         isStablecoin:
                           mode === "add" && side === "buy"
                             ? isStablecoin
@@ -412,6 +470,7 @@ export default function AddTransactionModal(props: {
                                 qty: amount,
                                 priceUsd: priceUsd,
                                 feeUsd: fee,
+                                chainId: selectedChainId || undefined,
                                 executedAt: props.initialTx?.executedAt,
                               }
                             : payload,
@@ -467,9 +526,11 @@ export default function AddTransactionModal(props: {
                   {top.map((a) => (
                     <button
                       key={a.id}
-                      className="rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50"
+                      className="cursor-pointer rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50"
                       onClick={async () => {
                         setSelected(a);
+                        setSelectedChainId("");
+                        setChainQuery("");
                         setStep("form");
                         setSide("buy");
                         setPriceRaw("");
@@ -508,9 +569,10 @@ export default function AddTransactionModal(props: {
                   {results.map((a) => (
                     <button
                       key={a.id}
-                      className="rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50"
+                      className="cursor-pointer rounded-xl border border-gray-200 p-3 text-left hover:bg-gray-50"
                       onClick={async () => {
                         setSelected(a);
+                        setSelectedChainId("");
                         setStep("form");
                         setSide("buy");
                         setPriceRaw("");
@@ -538,7 +600,7 @@ export default function AddTransactionModal(props: {
             <div className="flex flex-wrap items-center gap-2">
               <button
                 className={cls(
-                  "px-3 py-2 rounded-xl text-sm border",
+                  "cursor-pointer px-3 py-2 rounded-xl text-sm border",
                   side === "buy"
                     ? "bg-emerald-600 text-white border-emerald-600"
                     : "bg-white border-gray-200",
@@ -550,7 +612,7 @@ export default function AddTransactionModal(props: {
               </button>
               <button
                 className={cls(
-                  "px-3 py-2 rounded-xl text-sm border",
+                  "cursor-pointer px-3 py-2 rounded-xl text-sm border",
                   side === "sell"
                     ? "bg-red-600 text-white border-red-600"
                     : "bg-white border-gray-200",
@@ -561,6 +623,20 @@ export default function AddTransactionModal(props: {
                 Sell
               </button>
             </div>
+
+            <label className="grid gap-1">
+              <span className="text-xs text-gray-500">Chain</span>
+              <ChainPicker
+                options={chainOptions}
+                query={chainQuery}
+                selectedChainId={selectedChainId}
+                onQueryChange={setChainQuery}
+                onSelect={(chain) => {
+                  setSelectedChainId(chain.id);
+                  setChainQuery("");
+                }}
+              />
+            </label>
 
             <label className="grid gap-1">
               <span className="text-xs text-gray-500">
@@ -633,10 +709,10 @@ export default function AddTransactionModal(props: {
             </div>
 
             {mode === "add" && side === "buy" ? (
-              <label className="flex items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 text-sm">
+              <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-gray-200 bg-white p-3 text-sm">
                 <input
                   type="checkbox"
-                  className="mt-0.5 h-4 w-4 rounded border-gray-300"
+                  className="mt-0.5 h-4 w-4 cursor-pointer rounded border-gray-300"
                   checked={isStablecoin}
                   onChange={(e) => setIsStablecoin(e.target.checked)}
                 />
@@ -659,10 +735,13 @@ export default function AddTransactionModal(props: {
 
             {!hasLockedInitialAsset && (
               <button
-                className="text-xs text-slate-500 underline justify-self-start"
+                className="cursor-pointer text-xs text-slate-500 underline justify-self-start"
                 onClick={async () => {
                   setStep("pick");
                   setSelected(null);
+                  setChainOptions([]);
+                  setSelectedChainId("");
+                  setChainQuery("");
                   setAmountRaw("");
                   setTotalRaw("");
                   setFeeRaw("0");
@@ -688,7 +767,7 @@ export default function AddTransactionModal(props: {
           footer={
             <div className="flex items-center justify-end gap-3">
               <button
-                className="rounded-xl border bg-white px-4 py-2 text-sm hover:bg-gray-50 disabled:opacity-50"
+                className="cursor-pointer rounded-xl border bg-white px-4 py-2 text-sm hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => setConfirmDeleteOpen(false)}
                 type="button"
                 disabled={busy}
@@ -696,7 +775,7 @@ export default function AddTransactionModal(props: {
                 Cancel
               </button>
               <button
-                className="rounded-xl bg-red-600 text-white px-4 py-2 text-sm hover:bg-red-700 disabled:opacity-50"
+                className="cursor-pointer rounded-xl bg-red-600 text-white px-4 py-2 text-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
                 onClick={() => void handleDeleteNow()}
                 type="button"
                 disabled={busy}
@@ -722,5 +801,65 @@ export default function AddTransactionModal(props: {
         </Modal>
       )}
     </>
+  );
+}
+
+function ChainPicker({
+  options,
+  query,
+  selectedChainId,
+  onQueryChange,
+  onSelect,
+}: {
+  options: ChainOption[];
+  query: string;
+  selectedChainId: string;
+  onQueryChange: (value: string) => void;
+  onSelect: (chain: ChainOption) => void;
+}) {
+  const fallback =
+    selectedChainId && !options.some((chain) => chain.id === selectedChainId)
+      ? {
+          id: selectedChainId,
+          name: selectedChainId,
+          symbol: selectedChainId.slice(0, 5).toUpperCase(),
+        }
+      : null;
+  const selected =
+    options.find((chain) => chain.id === selectedChainId) ?? fallback;
+
+  return (
+    <div className="grid gap-2 rounded-xl border border-gray-200 bg-white p-2">
+      <input
+        className="h-9 w-full rounded-lg border border-gray-200 px-3 text-sm outline-none focus:border-[#CBB5FF]"
+        value={query}
+        onChange={(event) => onQueryChange(event.target.value)}
+        placeholder={selected ? selected.name : "Search chains..."}
+      />
+      <div className="grid max-h-[194px] gap-1 overflow-y-auto">
+        {(options.length ? options : selected ? [selected] : []).map((chain) => {
+          const active = chain.id === selectedChainId;
+
+          return (
+            <button
+              key={chain.id}
+              type="button"
+              className={cls(
+                "flex min-h-[34px] cursor-pointer items-center justify-between gap-3 rounded-lg px-2.5 text-left text-sm",
+                active
+                  ? "bg-[#F5F0FF] font-semibold text-[#5F35D5]"
+                  : "text-slate-700 hover:bg-gray-50",
+              )}
+              onClick={() => onSelect(chain)}
+            >
+              <span className="min-w-0 truncate">{chain.name}</span>
+              <span className="shrink-0 text-xs font-semibold text-slate-400">
+                {chain.symbol}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+    </div>
   );
 }
